@@ -1,0 +1,56 @@
+name: Sync upstream AiToEarn
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync-upstream:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/yikart/AiToEarn.git || true
+          git fetch upstream main --prune
+
+      - name: Create sync branch
+        run: |
+          BRANCH="sync/upstream-$(date -u +%Y%m%d-%H%M%S)"
+          echo "BRANCH=$BRANCH" >> "$GITHUB_ENV"
+          git checkout -b "$BRANCH"
+
+      - name: Merge upstream
+        run: |
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "NO_CHANGES=true" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          git merge upstream/main --no-edit
+
+      - name: Push sync branch
+        if: env.NO_CHANGES != 'true'
+        run: git push origin "$BRANCH"
+
+      - name: Open PR
+        if: env.NO_CHANGES != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr create \
+            --title "chore: sync upstream AiToEarn" \
+            --body "Automated upstream sync from yikart/AiToEarn main. Review SocialOps custom areas before merge." \
+            --base main \
+            --head "$BRANCH"
