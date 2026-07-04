@@ -14,6 +14,13 @@ Expected:
 - `upstream` → `https://github.com/yikart/AiToEarn.git`
 - `upstream` push URL → `DISABLED`
 
+
+## GitHub Action
+
+Use GitHub → Actions → `Sync upstream AiToEarn` → `Run workflow`.
+
+The action creates a `sync/upstream-*` branch and opens a PR into `main`. If upstream conflicts with SocialOps custom code, the action fails safely and requires local/manual merge.
+
 ## Safe Update
 
 ```powershell
@@ -45,3 +52,4 @@ git push -u origin HEAD
 ```
 
 Open a PR into `main`, test, then merge.
+
