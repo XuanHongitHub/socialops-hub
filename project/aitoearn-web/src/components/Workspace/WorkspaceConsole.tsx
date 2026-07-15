@@ -15,8 +15,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Textarea } from '@/components/ui/textarea'
-import { toast } from '@/lib/toast'
-import { cn } from '@/lib/utils'
+import { toast } from '@/utils/ui/toast'
+import { cn } from '@/utils/className'
 import {
   Activity,
   Cable,

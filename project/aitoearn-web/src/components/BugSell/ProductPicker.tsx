@@ -27,7 +27,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { cn } from '@/lib/utils'
+import { cn } from '@/utils/className'
 
 const PRODUCTS_URL = '/api/local/bugsell/products?per_page=12'
 const SHOPS_URL = '/api/local/bugsell/shops?per_page=12'

@@ -5,7 +5,7 @@
 
 import { Loader2, X } from 'lucide-react'
 import { memo } from 'react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/utils/className'
 
 export type VisionStepId = 'collect' | 'resolve' | 'vision' | 'compose' | 'done' | 'error'
 

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { WorkspaceConsole } from '@/components/Workspace/WorkspaceConsole'
-import { getMetadata } from '@/utils/general'
+import { getMetadata } from '@/utils/metadata'
 import { fallbackLng, languages } from '@/app/i18n/settings'
 
 export async function generateMetadata({

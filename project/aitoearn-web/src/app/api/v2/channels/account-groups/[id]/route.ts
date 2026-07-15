@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { groupFile, readJson, writeJson } from '@/app/api/plat/meta/_local'
-import type { AccountGroupItem } from '@/api/types/account.type'
+import type { AccountGroupItem } from '@/api/accounts/account.types'
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params

@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { useTranslation } from '@/app/i18n'
 import { fallbackLng, languages } from '@/app/i18n/settings'
 import { ProvidersTab } from '@/components/SettingsModal/tabs/ProvidersTab'
-import { getMetadata } from '@/utils/general'
+import { getMetadata } from '@/utils/metadata'
 
 export async function generateMetadata({
   params,

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSocialStoreStatus, readJson, accountFile, groupFile, type LocalSocialAccount } from '@/app/api/plat/meta/_local'
-import type { AccountGroupItem } from '@/api/types/account.type'
+import type { AccountGroupItem } from '@/api/accounts/account.types'
 
 export async function GET() {
   const status = await getSocialStoreStatus()

@@ -1,6 +1,6 @@
 import { join } from 'node:path'
-import type { PublishRecordItem } from '@/api/plat/types/publish.types'
-import { PublishStatus } from '@/api/plat/types/publish.types'
+import type { PublishRecordItem } from '@/api/platforms/publish.types'
+import { PublishStatus } from '@/api/platforms/publish.constants'
 import { readJson, writeJson } from '@/app/api/plat/meta/_local'
 
 const appData = process.env.APPDATA || join(process.env.USERPROFILE || '', 'AppData', 'Roaming')

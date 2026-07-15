@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { groupFile, readJson, writeJson } from '@/app/api/plat/meta/_local'
-import type { AccountGroupItem } from '@/api/types/account.type'
+import type { AccountGroupItem } from '@/api/accounts/account.types'
 
 export async function PUT(req: Request) {
   const body = await req.json().catch(() => ({})) as { list?: { id: string, rank: number }[] }

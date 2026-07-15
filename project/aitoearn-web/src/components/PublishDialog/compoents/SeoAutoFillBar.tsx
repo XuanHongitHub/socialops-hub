@@ -24,8 +24,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { toast } from '@/lib/toast'
-import { cn } from '@/lib/utils'
+import { toast } from '@/utils/ui/toast'
+import { cn } from '@/utils/className'
 
 type ProviderId = 'auto' | 'grok' | '9router'
 type Stage = 'idle' | 'queued' | 'writing' | 'applying' | 'done' | 'failed'

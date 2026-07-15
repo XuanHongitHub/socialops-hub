@@ -34,8 +34,8 @@ import {
   SOCIAL_OPS_PRODUCT_CHIP_CLASS,
   SOCIAL_OPS_PRODUCT_THUMB_CLASS,
 } from '@/lib/socialOps/socialOpsShell'
-import { toast } from '@/lib/toast'
-import { cn } from '@/lib/utils'
+import { toast } from '@/utils/ui/toast'
+import { cn } from '@/utils/className'
 import { useAccountStore } from '@/store/account'
 
 type PlatformPack = { title: string, caption: string, hashtags: string[] }

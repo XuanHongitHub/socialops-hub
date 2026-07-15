@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { PublishStatus } from '@/api/plat/types/publish.types'
+import { PublishStatus } from '@/api/platforms/publish.constants'
 import { PlatType } from '@/app/config/platConfig'
 import { publishRecordToPlatform } from '@/app/api/plat/publish/publishers'
 import { getPublishRecords, savePublishRecords } from '@/app/api/plat/publish/_local'

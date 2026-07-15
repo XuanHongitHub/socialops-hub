@@ -1,4 +1,4 @@
-import type { SocialAccount } from '@/api/types/account.type'
+import type { SocialAccount } from '@/api/accounts/account.types'
 import type { PlatType } from '@/app/config/platConfig'
 import {
   AccountPlatInfoMap,

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { PlatType } from '@/app/config/platConfig'
-import { PublishStatus } from '@/api/plat/types/publish.types'
+import { PublishStatus } from '@/api/platforms/publish.constants'
 import { accountFile, readJson, type LocalSocialAccount } from '@/app/api/plat/meta/_local'
 import { getPublishRecords, makePublishRecord, savePublishRecords } from '@/app/api/plat/publish/_local'
 import { publishRecordToPlatform } from '@/app/api/plat/publish/publishers'

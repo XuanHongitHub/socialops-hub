@@ -1,4 +1,4 @@
-import type { PublishRecordItem } from '@/api/plat/types/publish.types'
+import type { PublishRecordItem } from '@/api/platforms/publish.types'
 import { accountFile, readJson, upsertAccount, type LocalSocialAccount } from '@/app/api/plat/meta/_local'
 import { youtubeClientId, youtubeClientSecret } from '@/app/api/plat/youtube/_local'
 
