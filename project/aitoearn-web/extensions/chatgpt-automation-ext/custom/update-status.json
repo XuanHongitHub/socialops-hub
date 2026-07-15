@@ -1,0 +1,22 @@
+{
+    "timestamp":  "2026-07-14T10:38:46.7038865+07:00",
+    "mode":  "apply-only",
+    "localVersion":  "1.2.8.0",
+    "patchReport":  [
+                        {
+                            "Patch":  "premium-unlock",
+                            "File":  "index.html-B9vKdp8Y.js",
+                            "Status":  "ok",
+                            "Applied":  "exact:default-premium-state, exact:ru-always-pro, exact:mu-always-pro, exact:logout-keeps-premium, exact:storage-load-force-pro, exact:daily-limit-unlimited, exact:is-limit-reached-always-false, regex:fallback-limit-reached:already",
+                            "Failed":  ""
+                        },
+                        {
+                            "Patch":  "remove-author-and-compact-ui",
+                            "File":  "index.html-B9vKdp8Y.js",
+                            "Status":  "ok",
+                            "Applied":  "exact:remove-author-cta-block, exact:blank-author-href, exact:disable-report-bugs-author-link",
+                            "Failed":  ""
+                        }
+                    ],
+    "overlays":  2
+}

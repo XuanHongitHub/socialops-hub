@@ -1,0 +1,15 @@
+{
+  "id": "004-fresh-settings-on-run",
+  "description": "Re-read chrome.storage settings at sendJob so Run uses latest Settings (not stale UI snapshot).",
+  "files": [
+    {
+      "glob": "assets/index.html-*.js",
+      "replacements": [
+        {
+          "find": "sendJob:async(n,o={})=>{t.value=!0,e.value=null;const i=o.groupId??`group-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,a=o.concurrentPrompts,r=o.promptDelaySecondsMin,s=o.promptDelaySecondsMax;",
+          "replace": "sendJob:async(n,o={})=>{t.value=!0,e.value=null;try{if(\"undefined\"!=typeof chrome&&chrome?.storage?.local){const _st=await chrome.storage.local.get(\"flow_automation_settings\"),_f=_st?.flow_automation_settings;if(_f&&\"object\"==typeof _f)o={...o,concurrentPrompts:_f.concurrentPrompts??o.concurrentPrompts,promptDelaySecondsMin:_f.promptDelaySecondsMin??o.promptDelaySecondsMin,promptDelaySecondsMax:_f.promptDelaySecondsMax??o.promptDelaySecondsMax,outputCount:_f.outputCount??o.outputCount,maxRetries:_f.maxRetries??o.maxRetries,defaultVideoOption:_f.defaultVideoOption??o.defaultVideoOption,aspectRatio:_f.aspectRatio??o.aspectRatio,model:_f.model??o.model,imageModel:_f.imageModel??o.imageModel,autoDownloadVideoQuality:_f.autoDownloadVideoQuality??o.autoDownloadVideoQuality,autoDownloadImageQuality:_f.autoDownloadImageQuality??o.autoDownloadImageQuality,defaultMode:_f.defaultMode??o.defaultMode,defaultImageOption:_f.defaultImageOption??o.defaultImageOption}}}catch(_err){}const i=o.groupId??`group-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,a=o.concurrentPrompts,r=o.promptDelaySecondsMin,s=o.promptDelaySecondsMax;"
+        }
+      ]
+    }
+  ]
+}

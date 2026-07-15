@@ -1,0 +1,15 @@
+{
+  "id": "003-no-author-install-tab",
+  "description": "Do not open kylenguyen.me?new-version-installed=true on install (SocialOps).",
+  "files": [
+    {
+      "glob": "assets/index.ts-*.js",
+      "replacements": [
+        {
+          "findRegex": "await\\(async e=>\\{try\\{const \\w+=await chrome\\.tabs\\.query\\(\\{url:\\[`\\*://kylenguyen\\.me/\\*\\?\\$\\{e\\}`\\]\\}\\);if\\([\\s\\S]*?chrome\\.tabs\\.create\\(\\{url:`https://kylenguyen\\.me\\?\\$\\{e\\}`\\}\\)\\}catch\\(\\w+\\)\\{\\}\\}\\)\\(\"new-version-installed=true\"\\),?",
+          "replace": ""
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+/* Compact UI — smaller fonts across the side panel */
+html {
+  font-size: 12px !important;
+}
+body, #app {
+  font-size: 12px !important;
+}
+#app {
+  zoom: 0.88;
+}
+.text-xs { font-size: 0.7rem !important; line-height: 1rem !important; }
+.text-sm { font-size: 0.78rem !important; line-height: 1.1rem !important; }
+.text-base { font-size: 0.88rem !important; }
+.text-lg { font-size: 0.95rem !important; }
+.text-xl { font-size: 1.05rem !important; }
+h1, .text-2xl { font-size: 1.1rem !important; line-height: 1.3rem !important; }
+.p-button { font-size: 0.75rem !important; padding: 0.3rem 0.55rem !important; }
+.p-button.p-button-sm, .p-button-sm { font-size: 0.7rem !important; padding: 0.25rem 0.45rem !important; }
+.p-inputtext, .p-textarea, .p-select, .p-dropdown, .p-inputnumber-input, textarea, input, select {
+  font-size: 0.78rem !important;
+}
+.p-dialog .p-dialog-title { font-size: 0.9rem !important; }
+.p-dialog .p-dialog-content { font-size: 0.78rem !important; }
+.p-tabview .p-tabview-nav li .p-tabview-nav-link { font-size: 0.75rem !important; padding: 0.4rem 0.65rem !important; }
+.p-tag, .p-badge { font-size: 0.65rem !important; }
+label, .p-floatlabel label { font-size: 0.75rem !important; }
+.pi { font-size: 0.9em !important; }

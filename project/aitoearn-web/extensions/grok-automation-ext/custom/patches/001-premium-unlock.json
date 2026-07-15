@@ -1,0 +1,58 @@
+{
+  "id": "premium-unlock",
+  "description": "Force Max/Premium default, remove free daily limit, bypass auth plan API.",
+  "enabled": true,
+  "targetGlobs": ["assets/index.html-*.js"],
+  "replacements": [
+    {
+      "id": "default-premium-state",
+      "find": "jd=Qo(\"\"),Hd=Qo(!1),Wd=Qo(!1),Kd=Qo(!1),qd=Qo(\"\")",
+      "replace": "jd=Qo(\"premium@unlocked\"),Hd=Qo(!0),Wd=Qo(!0),Kd=Qo(!1),qd=Qo(\"\")",
+      "required": true
+    },
+    {
+      "id": "yd-always-pro",
+      "find": "async function Yd(t){const e=await fetch(`${zd}/api/auth/plan`,{headers:{Authorization:`Bearer ${t}`}});if(!e.ok)return Jd(),Wd.value=!1,Hd.value=!1,void(qd.value=401===e.status?\"Session expired. Please sign in again.\":\"\");const n=await e.json();Hd.value=!!n.active,Wd.value=!0}",
+      "replace": "async function Yd(t){Hd.value=!0,Wd.value=!0,qd.value=\"\"}",
+      "required": true
+    },
+    {
+      "id": "xd-always-pro",
+      "find": "async function Xd(t){Kd.value=!0,qd.value=\"\";try{const e=await fetch(`${zd}/api/auth/login`,{method:\"POST\",headers:{\"Content-Type\":\"application/json\"},body:JSON.stringify({email:t})});if(!e.ok)throw new Error(\"Login failed\");const{accessToken:n}=await e.json(),o=await fetch(`${zd}/api/auth/plan`,{headers:{Authorization:`Bearer ${n}`}});if(!o.ok)throw new Error(\"Could not verify plan\");const i=await o.json();jd.value=t,Hd.value=!!i.active,Wd.value=!0,\"undefined\"!=typeof chrome&&chrome?.storage?.local&&chrome.storage.local.set({[Gd]:n,[Ud]:t})}catch{qd.value=\"Could not verify email. Please try again.\",Wd.value=!1,Hd.value=!1}finally{Kd.value=!1}}",
+      "replace": "async function Xd(t){Kd.value=!0,qd.value=\"\";try{jd.value=t||\"premium@unlocked\",Hd.value=!0,Wd.value=!0,\"undefined\"!=typeof chrome&&chrome?.storage?.local&&chrome.storage.local.set({[Gd]:\"unlocked\",[Ud]:jd.value})}catch{qd.value=\"\",Wd.value=!0,Hd.value=!0}finally{Kd.value=!1}}",
+      "required": true
+    },
+    {
+      "id": "logout-keeps-premium",
+      "find": "function Zd(){jd.value=\"\",Hd.value=!1,Wd.value=!1,qd.value=\"\",Jd()}",
+      "replace": "function Zd(){jd.value=\"premium@unlocked\",Hd.value=!0,Wd.value=!0,qd.value=\"\",Jd()}",
+      "required": true
+    },
+    {
+      "id": "storage-load-force-pro",
+      "find": "\"undefined\"!=typeof chrome&&chrome?.storage?.local&&chrome.storage.local.get([Gd,Ud],async t=>{const e=t[Gd],n=t[Ud];e&&n&&(jd.value=n,await Yd(e))})",
+      "replace": "\"undefined\"!=typeof chrome&&chrome?.storage?.local&&chrome.storage.local.get([Gd,Ud],async t=>{const e=t[Gd],n=t[Ud];n&&(jd.value=n),Hd.value=!0,Wd.value=!0,e&&await Yd(e)})",
+      "required": true
+    },
+    {
+      "id": "daily-limit-unlimited",
+      "find": "function bu(){const t=Ds(()=>Math.min(uu.value/10*100,100)),e=Ds(()=>uu.value>=10);return{usedToday:uu,percentage:t,isExceeded:e,limit:10}}",
+      "replace": "function bu(){const t=Ds(()=>0),e=Ds(()=>!1);return{usedToday:uu,percentage:t,isExceeded:e,limit:999999}}",
+      "required": true
+    },
+    {
+      "id": "is-limit-reached-always-false",
+      "find": "return{isLimitReached:Ds(()=>{if(!s.value)return!1;if(e.value)return!1;const n=10-r.value;return t?n-t.value<0:n<=0}),openUpgrade:async()=>{if(!n.value)return void a();if(await i(),e.value)return;const t=o.value?`${Fu}?email=${encodeURIComponent(o.value)}`:Fu;\"undefined\"!=typeof chrome&&chrome?.tabs?.create?chrome.tabs.create({url:t}):window.open(t,\"_blank\")}}",
+      "replace": "return{isLimitReached:Ds(()=>!1),openUpgrade:async()=>{return}}",
+      "required": true
+    }
+  ],
+  "regexReplacements": [
+    {
+      "id": "fallback-limit-reached",
+      "pattern": "isLimitReached:Ds\\(\\(\\)=>\\{if\\(!s\\.value\\)return!1;if\\(e\\.value\\)return!1;const n=\\d+-r\\.value;return t\\?n-t\\.value<0:n<=0\\}\\)",
+      "replace": "isLimitReached:Ds(()=>!1)",
+      "required": false
+    }
+  ]
+}

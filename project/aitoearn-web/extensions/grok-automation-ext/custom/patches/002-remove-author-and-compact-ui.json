@@ -1,0 +1,27 @@
+{
+  "id": "remove-author-and-compact-ui",
+  "description": "Remove author kylenguyen.me header link; compact UI handled via HTML overlay.",
+  "enabled": true,
+  "targetGlobs": ["assets/index.html-*.js"],
+  "replacements": [
+    {
+      "id": "remove-author-cta-block",
+      "find": ",us(\"div\",kI,[us(\"span\",xI,In(t.$t(\"sidePanel.header.communityCtaPrefix\")),1),us(\"a\",wI,[ms(In(t.$t(\"sidePanel.header.communityCtaLink\"))+\" \",1),e[6]||(e[6]=us(\"i\",{class:\"pi pi-external-link text-xs\",\"aria-hidden\":\"true\"},null,-1))])])",
+      "replace": "",
+      "required": true
+    },
+    {
+      "id": "blank-author-href",
+      "find": "wI={href:\"https://kylenguyen.me\",target:\"_blank\",rel:\"noopener noreferrer\",class:\"inline-flex items-center gap-1 text-primary hover:underline font-semibold\"}",
+      "replace": "wI={href:\"#\",target:\"_self\",rel:\"noopener noreferrer\",class:\"hidden\"}",
+      "required": false
+    },
+    {
+      "id": "disable-report-bugs-author-link",
+      "find": "l=()=>window.open(\"https://kylenguyen.me/?report-bugs\",\"_blank\")",
+      "replace": "l=()=>{}",
+      "required": false
+    }
+  ],
+  "regexReplacements": []
+}

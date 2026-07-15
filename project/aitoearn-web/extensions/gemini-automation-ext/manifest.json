@@ -1,0 +1,72 @@
+{
+   "action": {
+      "default_title": "Gemini Automation - Auto Gemini on gemini.google.com"
+   },
+   "author": {
+      "email": "kylenguyenaws@gmail.com"
+   },
+   "background": {
+      "service_worker": "service-worker-loader.js",
+      "type": "module"
+   },
+   "content_scripts": [
+      {
+         "all_frames": false,
+         "js": [
+            "assets/index.ts-Bo8P6HK1.js"
+         ],
+         "matches": [
+            "*://gemini.google.com/*"
+         ],
+         "run_at": "document_end"
+      }
+   ],
+   "description": "Auto Gemini for your prompts at scale. Batch generate and auto-download responses and images on Gemini.Google.com.",
+   "host_permissions": [
+      "*://gemini.google.com/*",
+      "*://*.google.com/*",
+      "*://127.0.0.1:6061/*",
+      "*://localhost:6061/*",
+      "http://127.0.0.1:6061/*",
+      "http://localhost:6061/*",
+      "https://configs.kylenguyen.me/*",
+      "https://extension-config.onegreen.workers.dev/*"
+   ],
+   "icons": {
+      "16": "src/assets/logo.png",
+      "24": "src/assets/logo.png",
+      "32": "src/assets/logo.png",
+      "128": "src/assets/logo.png"
+   },
+   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3YRNj9EpMTg0sXOYkE+FolI6iSqFMRRxwSBVZVejBuiwyQ9yU0q33W04hM30EcfZCnDsj42fJL0Mf4NiNWSoSGDjoOYUkjYi6Odc7xgyvApz+7RfjdkmKj740gvEf5pTzZVwc18SFDhDDO22LGglPG89c/ipXjnJu9gmD51hKa2GvNkB3XjtgdnLunb8IQ5BuUcFOPNg3m2olnIvP50M2YeWw8CC4BdwZoCHIwZ1K1/1i966lbH1T7bW1+MkFh6hTbNcASvHuFKN9Hz5+DAgDOuMomYr91dGL1zIDXZkiw6o6AAGTS3eA2PJ7FFBCg8RTTp69o+X164j9gyzvBcdHQIDAQAB",
+   "manifest_version": 3,
+   "name": "Gemini Automation - Auto Gemini on gemini.google.com",
+   "offline_enabled": true,
+   "permissions": [
+      "storage",
+      "tabs",
+      "background",
+      "sidePanel",
+      "activeTab",
+      "downloads",
+      "debugger"
+   ],
+   "side_panel": {
+      "default_path": "src/ui/side-panel/index.html"
+   },
+   "update_url": "https://clients2.google.com/service/update2/crx",
+   "version": "1.1.2.0",
+   "version_name": "1.1.2",
+   "web_accessible_resources": [
+      {
+         "matches": [
+            "*://gemini.google.com/*"
+         ],
+         "resources": [
+            "assets/catchUploadFile.ts-CDtmzXS_.js",
+            "assets/index.ts-Bo8P6HK1.js"
+         ],
+         "use_dynamic_url": false
+      }
+   ]
+}
