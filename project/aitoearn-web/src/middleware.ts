@@ -15,18 +15,24 @@ export function middleware(req: NextRequest) {
   if (ProxyUrls.find(v => req.nextUrl.pathname.includes(v!))) {
     return NextResponse.next()
   }
+  if (/\.(?:png|jpg|jpeg|gif|webp|svg|ico|txt|xml|js|css|map|woff|woff2)$/i.test(req.nextUrl.pathname)) {
+    return NextResponse.next()
+  }
   if (
     [
       '/robots.txt',
       '/sitemap.xml',
       '/sitemap',
-      '/health',
       '/healthz',
       '/js/xhs_sign_init.js',
       '/js/xhs_web_sign.js',
       '/js/xhs_sign_core.js',
       '/js/xhs_sign_inject.js',
+      '/js/xhs-sdk.js',
+      '/task-sitemap.xml',
+      '/task-sitemap/',
       '/shortLink',
+      '/tinymce',
       '/downloads',
     ].find(v => req.nextUrl.pathname.includes(v!))
   ) {
@@ -42,8 +48,6 @@ export function middleware(req: NextRequest) {
   let lng: string | undefined | null
   if (req.cookies.has(cookieName))
     lng = acceptLanguage.get(req.cookies.get(cookieName)?.value)
-  if (!lng)
-    lng = acceptLanguage.get(req.headers.get('Accept-Language'))
   if (!lng)
     lng = fallbackLng
 

@@ -163,6 +163,28 @@ export async function deleteMaterialsByIds(ids: string[]) {
   return { deleted }
 }
 
+/** Prefer durable local asset routes (outside git), never bare vidgen.x.ai temp links. */
+export function toLocalMediaUrl(url: string | undefined | null): string {
+  const u = String(url || '').trim()
+  if (!u)
+    return ''
+  const byPath = u.match(/\/api\/ai\/assets\/([^/?#]+)\/file\/?$/i)
+  if (byPath?.[1])
+    return `/api/ai/assets/local-file?id=${encodeURIComponent(byPath[1])}`
+  const byFile = u.match(/\/api\/ai\/assets\/file\/([^/?#]+)/i)
+  if (byFile?.[1])
+    return `/api/ai/assets/local-file?id=${encodeURIComponent(byFile[1])}`
+  if (/local-file/i.test(u)) {
+    const q = u.match(/[?&]id=([^&]+)/i)
+    if (q?.[1])
+      return `/api/ai/assets/local-file?id=${encodeURIComponent(decodeURIComponent(q[1]))}`
+  }
+  // Remote Grok temp — never store as primary media URL
+  if (/vidgen\.x\.ai|xai-vidgen|xai-video/i.test(u))
+    return ''
+  return u
+}
+
 export async function createMaterialFromGeneration(input: {
   groupId: string
   title: string
@@ -177,8 +199,9 @@ export async function createMaterialFromGeneration(input: {
   const materials = await getMaterials()
   const now = new Date().toISOString()
   const mediaList: LocalMaterial['mediaList'] = []
-  if (input.videoUrl) {
-    mediaList.push({ url: input.videoUrl, type: 'video' })
+  const videoUrl = toLocalMediaUrl(input.videoUrl)
+  if (videoUrl) {
+    mediaList.push({ url: videoUrl, type: 'video' })
   }
   for (const url of input.imageUrls || []) {
     if (url)
@@ -197,7 +220,7 @@ export async function createMaterialFromGeneration(input: {
       || (typeof input.generationParams?.productImageUrl === 'string' ? String(input.generationParams.productImageUrl) : '')
       || '',
     mediaList,
-    type: input.videoUrl ? 'video' : 'article',
+    type: videoUrl ? 'video' : 'article',
     status: 1,
     topics: input.topics || [],
     model: input.model,

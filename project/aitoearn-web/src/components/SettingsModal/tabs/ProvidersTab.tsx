@@ -71,8 +71,8 @@ import {
 } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { toast } from '@/lib/toast'
-import { cn } from '@/lib/utils'
+import { toast } from '@/utils/ui/toast'
+import { cn } from '@/utils/className'
 import {
   getConnectionIdentity,
   healthTone,

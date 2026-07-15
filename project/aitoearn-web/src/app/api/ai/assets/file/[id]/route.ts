@@ -1,10 +1,15 @@
-import { readFileSync, statSync, existsSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { NextResponse } from 'next/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+/**
+ * Serve archived media from local disk OUTSIDE git.
+ * Path: /api/ai/assets/file/:id
+ * Root: SOCIALOPS_MEDIA_ROOT/generated-videos (e.g. E:\SocialsHub\media\generated-videos)
+ */
 function mediaRoots() {
   const appData = process.env.APPDATA || join(process.env.USERPROFILE || '', 'AppData', 'Roaming')
   const envRoot = process.env.SOCIALOPS_MEDIA_ROOT
@@ -16,10 +21,9 @@ function mediaRoots() {
 }
 
 function resolveFile(id: string) {
-  const names = [`${id}.mp4`, `${id}.webm`]
-  // Registered path from ai-assets.json (absolute, outside git)
+  const appData = process.env.APPDATA || join(process.env.USERPROFILE || '', 'AppData', 'Roaming')
   try {
-    const store = join(process.env.APPDATA || '', 'SocialsHub', 'ai-assets.json')
+    const store = join(appData, 'SocialsHub', 'ai-assets.json')
     if (existsSync(store)) {
       const raw = JSON.parse(readFileSync(store, 'utf8'))
       const list = Array.isArray(raw) ? raw : (raw.assets || raw.list || [])
@@ -27,15 +31,15 @@ function resolveFile(id: string) {
       if (hit?.path && existsSync(hit.path)) {
         const st = statSync(hit.path)
         if (st.isFile() && st.size > 0)
-          return { path: hit.path as string, size: st.size }
+          return { path: String(hit.path), size: st.size }
       }
     }
   }
-  catch { /* ignore catalog */ }
+  catch { /* ignore */ }
 
   for (const root of mediaRoots()) {
-    for (const name of names) {
-      const path = join(root, name)
+    for (const ext of ['.mp4', '.webm']) {
+      const path = join(root, `${id}${ext}`)
       if (!existsSync(path))
         continue
       const st = statSync(path)
@@ -59,7 +63,7 @@ export async function GET(
     if (!file) {
       return NextResponse.json({
         code: 410,
-        message: 'Local media not found (Grok temp URLs expire). Files live outside git under SOCIALOPS_MEDIA_ROOT/generated-videos.',
+        message: 'Local media not found outside git. Grok temp URLs expire — archive under SOCIALOPS_MEDIA_ROOT/generated-videos.',
         id,
         roots: mediaRoots(),
       }, { status: 410 })
@@ -71,8 +75,8 @@ export async function GET(
       status: 200,
       headers: {
         'Content-Type': mime,
-        'Accept-Ranges': 'bytes',
         'Content-Length': String(bytes.byteLength),
+        'Accept-Ranges': 'bytes',
         'Cache-Control': 'private, max-age=31536000, immutable',
         'X-SocialOps-Source': 'local-file',
       },

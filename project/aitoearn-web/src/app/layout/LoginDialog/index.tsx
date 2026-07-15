@@ -1,4 +1,4 @@
-﻿/**
+/**
  * LoginDialog - 全局登录弹框组件
  * 在当前页面弹出登录表单，避免跳转到独立登录页
  */
@@ -18,14 +18,17 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { cn } from '@/utils/className'
-import { useLoginDialogStore } from '@/store/login-dialog'
+import { useLoginDialogStore } from './store'
 
-export default function LoginDialog() {
-  const { visible } = useLoginDialogStore(
-    useShallow(state => ({ visible: state.visible })),
+export default function LoginDialog({ manualLoginDisabled = false }: { manualLoginDisabled?: boolean }) {
+  const { visible, storeManualLoginDisabled } = useLoginDialogStore(
+    useShallow(state => ({
+      visible: state.visible,
+      storeManualLoginDisabled: state.manualLoginDisabled,
+    })),
   )
 
-  if (!visible)
+  if (!visible || manualLoginDisabled || storeManualLoginDisabled)
     return null
 
   return <LoginDialogContent />
@@ -74,17 +77,17 @@ const LoginDialogContent = memo(() => {
       >
         <DialogTitle className="sr-only">{t('welcomeBack')}</DialogTitle>
 
-        {/* Logo + 标题 */}
+        {/* Logo + 副标题 */}
         <div className="flex flex-col items-center pb-2 pt-2">
           <Image
             src={logo}
-            alt="AiToEarn"
-            width={56}
-            height={56}
-            className="mb-4 drop-shadow-md"
+            alt="Socials Hub"
+            width={80}
+            height={80}
+            className="mb-4 h-20 w-20 rounded-2xl object-cover shadow-md ring-1 ring-border/50 drop-shadow-md"
+            priority
           />
-          <h2 className="text-xl font-semibold text-foreground">{t('welcomeBack')}</h2>
-          <p className="mt-1.5 text-sm text-muted-foreground">{t('loginSubtitle')}</p>
+          <p className="text-sm text-muted-foreground">{t('loginSubtitle')}</p>
         </div>
 
         {/* 登录表单 */}
@@ -122,3 +125,4 @@ const LoginDialogContent = memo(() => {
 })
 
 LoginDialogContent.displayName = 'LoginDialogContent'
+

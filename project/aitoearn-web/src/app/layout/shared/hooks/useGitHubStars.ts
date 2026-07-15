@@ -22,6 +22,9 @@ export function useGitHubStars() {
   )
 
   useEffect(() => {
+    if (['socialops.bebio.site', '127.0.0.1', 'localhost'].includes(window.location.hostname))
+      return
+
     if (Date.now() - githubStarsUpdatedAt < ONE_DAY_MS)
       return
 

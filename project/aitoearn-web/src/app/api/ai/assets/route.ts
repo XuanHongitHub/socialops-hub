@@ -14,7 +14,8 @@ export async function GET(req: Request) {
 
   const list = validAssets.slice(start, start + pageSize).map(({ path: _path, ...asset }) => ({
     ...asset,
-    url: /^https?:\/\//i.test(asset.url) ? asset.url : `/api/ai/assets/${asset.id}/file`,
+    // Always serve from local disk outside git (never bare Grok temp CDN)
+    url: `/api/ai/assets/local-file?id=${encodeURIComponent(asset.id)}`,
     type: asset.type === 'video' ? 'aiVideo' : 'aiImage',
     mimeType: asset.type === 'video' ? 'video/mp4' : 'image/png',
     filename: asset.title,

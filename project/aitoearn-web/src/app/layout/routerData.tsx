@@ -1,12 +1,13 @@
 /**
  * 路由/导航数据配置
- * 包含开源版保留导航项的图标、路径、翻译键等信息。
+ * 包含导航项的图标、路径、翻译键等信息
  */
-
 import {
   Bot,
   History,
   Home,
+  MonitorSmartphone,
+  Network,
   Sparkles,
   Upload,
 } from 'lucide-react'
@@ -28,7 +29,7 @@ export const routerData: IRouterDataItem[] = [
   {
     name: 'Content Management',
     translationKey: 'header.draftBox',
-    path: '/',
+    path: '/draft-box',
     icon: <Home size={20} />,
   },
   {
@@ -49,11 +50,24 @@ export const routerData: IRouterDataItem[] = [
     path: '/accounts',
     icon: <Upload size={20} />,
   },
+  // Tasks moved to notification panel
   {
     name: 'Agent Assets',
     translationKey: 'header.agentAssets',
     path: '/agent-assets',
     icon: <Bot size={20} />,
+  },
+  {
+    name: 'Provider Console',
+    translationKey: 'providerConsole',
+    path: '/providers',
+    icon: <Network size={20} />,
+  },
+  {
+    name: 'Browser Workspace',
+    translationKey: 'browserWorkspace',
+    path: '/workspace',
+    icon: <MonitorSmartphone size={20} />,
   },
 ]
 

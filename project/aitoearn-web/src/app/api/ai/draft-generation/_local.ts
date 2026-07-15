@@ -129,7 +129,8 @@ async function saveArchivedVideoAsset(input: {
     id: assetId,
     type: 'video' as const,
     title: input.title,
-    url: `/api/ai/assets/${assetId}/file`,
+    // Query form — reliable on this Next Windows stack (dynamic [id]/file was 500)
+    url: `/api/ai/assets/local-file?id=${encodeURIComponent(assetId)}`,
     path: outputPath,
     provider: input.provider,
     metadata: {

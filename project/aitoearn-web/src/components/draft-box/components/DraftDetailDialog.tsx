@@ -78,9 +78,31 @@ function MediaImage({ src, alt }: { src: string, alt: string }) {
   )
 }
 
+/** Rewrite legacy/broken asset paths to durable local-file route (disk outside git). */
+function durableMediaUrl(url: string | undefined | null): string {
+  const u = String(url || '').trim()
+  if (!u)
+    return ''
+  // Already local-file query
+  if (/\/api\/ai\/assets\/local-file/i.test(u))
+    return u
+  const byPath = u.match(/\/api\/ai\/assets\/([^/?#]+)\/file\/?$/i)
+  if (byPath?.[1])
+    return `/api/ai/assets/local-file?id=${encodeURIComponent(byPath[1])}`
+  const byFile = u.match(/\/api\/ai\/assets\/file\/([^/?#]+)/i)
+  if (byFile?.[1])
+    return `/api/ai/assets/local-file?id=${encodeURIComponent(byFile[1])}`
+  // Never play raw Grok temp CDN in the dialog
+  if (/vidgen\.x\.ai|xai-vidgen|xai-video/i.test(u))
+    return ''
+  return u
+}
+
 // 媒体预览组件 - 使用 Swiper 轮播
 const MediaPreview = memo(({ material }: { material: PromotionMaterial }) => {
-  const mediaList = material.mediaList || []
+  const mediaList = (material.mediaList || [])
+    .map(m => ({ ...m, url: durableMediaUrl(m.url) }))
+    .filter(m => Boolean(m.url))
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isHovered, setIsHovered] = useState(false)
 

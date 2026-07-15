@@ -1,0 +1,8 @@
+/**
+ * Settings Tabs 统一导出
+ */
+
+export * from './AgentTab'
+export * from './GeneralTab'
+export * from './ProfileTab'
+export * from './ProvidersTab'
