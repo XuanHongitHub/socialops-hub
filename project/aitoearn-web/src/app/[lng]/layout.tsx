@@ -2,15 +2,16 @@ import { dir } from 'i18next'
 import { headers } from 'next/headers'
 import Script from 'next/script'
 import { useTranslation } from '@/app/i18n'
+import { getHreflang } from '@/app/i18n/languageConfig'
 import { fallbackLng, languages } from '@/app/i18n/settings'
 import LayoutSidebar from '@/app/layout/LayoutSidebar'
 import { MainContent } from '@/app/layout/MainContent'
 import MobileNav from '@/app/layout/MobileNav'
 import { ChannelManager } from '@/components/ChannelManager'
-import { StructuredData } from '@/components/SEO/StructuredData'
-import { getHreflang } from '@/lib/i18n/languageConfig'
 import { Providers } from '../layout/Providers'
 import '../globals.css'
+
+export const dynamic = 'force-dynamic'
 
 export async function generateMetadata({ params }: { params: Promise<{ lng: string }> }) {
   let { lng } = await params
@@ -53,11 +54,7 @@ export default async function RootLayout({
   params: Promise<{ lng: string }>
 }>) {
   const { lng } = await params
-  const headersList = await headers()
-  const host = headersList.get('host') || 'localhost:3000'
-  const proto = headersList.get('x-forwarded-proto') || 'https'
-  const baseUrl = `${proto}://${host}`
-  const autoLoginToken = process.env.AUTO_LOGIN_TOKEN || ''
+  const autoLoginToken = process.env.AUTO_LOGIN_TOKEN?.trim() || undefined
 
   return (
     <html lang={lng} dir={dir(lng)} suppressHydrationWarning>
@@ -71,46 +68,9 @@ export default async function RootLayout({
           name="google-site-verification"
           content="sPyHcKp5GBej4O1pTNzZsGRGRxBLZq1_3ZV-UrgTX6U"
         />
-        {/* SEO: 全局结构化数据 */}
-        <StructuredData
-          organization={{
-            name: 'AiToEarn',
-            url: baseUrl,
-            logo: `${baseUrl}/logo.png`,
-            description: 'AI-powered content creation and social media management platform',
-            sameAs: ['https://twitter.com/aitoearn', 'https://www.linkedin.com/company/aitoearn'],
-          }}
-          website={{
-            name: 'AiToEarn',
-            url: baseUrl,
-            description: 'AI-powered content creation and social media management platform',
-            potentialAction: {
-              '@type': 'SearchAction',
-              'target': `${baseUrl}/search?q={search_term_string}`,
-              'query-input': 'required name=search_term_string',
-            },
-          }}
-        />
       </head>
       <body suppressHydrationWarning>
         {/* Rewardful 脚本 */}
-        <Script
-          id="remove-platform-region-gate"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `(() => {
-              const removeGate = () => {
-                document.querySelectorAll('[role="alertdialog"]').forEach((dialog) => {
-                  if (dialog.textContent && dialog.textContent.includes('Platform Region Restriction')) {
-                    dialog.remove();
-                  }
-                });
-              };
-              removeGate();
-              new MutationObserver(removeGate).observe(document.documentElement, { childList: true, subtree: true });
-            })();`,
-          }}
-        />
         <Script
           id="rewardful-init"
           strategy="afterInteractive"

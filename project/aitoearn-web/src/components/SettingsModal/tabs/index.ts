@@ -1,8 +1,6 @@
 /**
- * Settings Tabs 统一导出
+ * Settings tabs for components/SettingsModal.
+ * General/Profile live under layout; Providers is SocialOps-only.
  */
-
-export * from './AgentTab'
-export * from './GeneralTab'
-export * from './ProfileTab'
-export * from './ProvidersTab'
+export { GeneralTab, ProfileTab } from '@/app/layout/SettingsModal/tabs'
+export { ProvidersTab } from './ProvidersTab'
