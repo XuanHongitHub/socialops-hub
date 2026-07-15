@@ -33,6 +33,13 @@ describe('flowCdpDriver media helpers', () => {
     assert.equal(isArchivableFlowUrl(''), false)
   })
 
+  it('accepts Flow media.getMediaUrlRedirect (trpc path is not junk)', () => {
+    const u = 'https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=7109803b-4fa0-4531-8310-7f03789d9b61'
+    assert.equal(isJunkFlowMediaUrl(u), false)
+    assert.equal(isArchivableFlowUrl(u), true)
+    assert.equal(pickBestFlowMediaUrl(['blob:x', u]), u)
+  })
+
   it('scan/blob expressions are non-empty IIFEs', () => {
     assert.match(flowMediaScanExpression(), /querySelectorAll\('video'\)/)
     assert.match(flowBlobExtractExpression(), /btoa/)

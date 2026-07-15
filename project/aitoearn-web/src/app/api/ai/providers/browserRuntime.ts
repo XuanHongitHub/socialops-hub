@@ -246,6 +246,8 @@ export async function queueBrowserGenerationJob(input: {
       })
     : null
 
+  // Flow generation is owned by Flow Automation pack (mission via draft-generation flow_pack_driver).
+  // Bridge shell steps only open the host — they must NOT be treated as "generating".
   const steps = [
     { type: 'navigate', url: startUrl },
     { type: 'assert_host', expectedHost: host },
@@ -253,7 +255,8 @@ export async function queueBrowserGenerationJob(input: {
     {
       type: 'manual_checkpoint',
       text: isFlow
-        ? `Flow/VEO ${flowVeo.packVersion}: ${flowJob?.defaultMode} · ${aspectRatio} · ${flowJob?.defaultVideoOption || secondsToFlowVideoOption(duration)} · dl ${flowVeo.autoDownloadQualityVideo}. Open ${startUrl} — pack must generate (shell open ≠ done).`
+        ? `Flow/VEO ${flowVeo.packVersion}: mission payload ready (${flowJob?.defaultMode} · ${aspectRatio} · ${flowJob?.defaultVideoOption || secondsToFlowVideoOption(duration)}). `
+          + `Draft generation uses flow_pack_driver (config push + pack Run) — shell open alone is not success.`
         : `Browser job: ${parsed.capability} on ${parsed.platform} · SEO ${aspectRatio} · ${duration}s · ${resolution}. Prompt ready on ${startUrl}.`,
     },
   ]
@@ -274,10 +277,23 @@ export async function queueBrowserGenerationJob(input: {
       startUrl,
       expectedHost: host,
       capability: parsed.capability,
-      packId: parsed.packId,
+      packId: parsed.packId || (isFlow ? 'flow-automation' : undefined),
       draftTaskId: input.draftTaskId || undefined,
       channel: 'browser',
-      runtime: 'cdp_plus_extension_bridge',
+      // Flow: pack is source of truth; bridge is optional companion open-tab
+      runtime: isFlow ? 'flow_pack_mission' : 'cdp_plus_extension_bridge',
+      mission: isFlow
+        ? {
+            packId: 'flow-automation',
+            mode: flowJob?.defaultMode || 'textToVideo',
+            prompt: input.prompt,
+            aspectRatio,
+            duration,
+            videoOption: flowJob?.defaultVideoOption,
+            concurrentPrompts: 1,
+            outputCount: 1,
+          }
+        : undefined,
       seo: {
         aspectRatio,
         duration,
@@ -296,6 +312,8 @@ export async function queueBrowserGenerationJob(input: {
     job,
     seat: { id: seat.id, cdpEndpoint: seat.cdpEndpoint },
     parsed,
-    message: 'Browser job queued — Bridge extension pulls jobs/next on the seat (same control loop as browser MCP).',
+    message: isFlow
+      ? 'Flow mission queued for pack path (draft-generation uses flow_pack_driver: config + Run + harvest).'
+      : 'Browser job queued — Bridge extension pulls jobs/next on the seat (same control loop as browser MCP).',
   }
 }

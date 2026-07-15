@@ -596,7 +596,8 @@ async function processDraftTask(task: LocalDraftTask, body: Record<string, any>)
         if (aspectRatio !== '9:16' && aspectRatio !== '16:9')
           aspectRatio = hubMedia?.flowVeo?.aspectRatio || '9:16'
       }
-      // ── Flow / VEO: full CDP path → video media → archive → content material ──
+      // ── Flow / VEO: pack mission (config + Run) → media → archive ──
+      // Do NOT CDP-fill labs.google prompt box — Flow Automation extension owns generation.
       if (isFlowModel) {
         const cdpEndpoint = runtime.seat?.cdpEndpoint || 'http://127.0.0.1:9480'
         const seatId = runtime.seat?.id || 'primary'
@@ -606,11 +607,11 @@ async function processDraftTask(task: LocalDraftTask, body: Record<string, any>)
           status: 'generating',
           response: {
             title: `Flow · ${browserModel}`,
-            description: 'Driving Google Flow via CDP — submit prompt, wait for video, archive to Draft.',
-            topics: ['browser', 'flow', 'veo'],
+            description: 'Mission to Flow Automation pack — config push, panel Run, harvest media.',
+            topics: ['browser', 'flow', 'veo', 'pack'],
             progress: {
-              percent: 15,
-              stage: 'Opening Google Flow on seat…',
+              percent: 12,
+              stage: 'Pushing mission to Flow pack…',
               providerStatus: 'running',
               updatedAt: new Date().toISOString(),
             },
@@ -620,32 +621,37 @@ async function processDraftTask(task: LocalDraftTask, body: Record<string, any>)
               model: browserModel,
               seatId,
               cdpEndpoint,
-              runtime: 'flow_cdp_driver',
-              phase: 'driving',
+              runtime: 'flow_pack_driver',
+              phase: 'pack_mission',
               duration,
               aspectRatio,
             },
           },
         })
 
-        const { driveFlowGenerationViaCdp, isArchivableFlowUrl } = await import(
+        const { isArchivableFlowUrl } = await import(
           '@/app/api/ai/providers/extension/flowCdpDriver'
+        )
+        const { driveFlowPackGeneration } = await import(
+          '@/app/api/ai/providers/extension/flowPackDriver'
         )
 
         let lastProgressAt = 0
-        const drive = await driveFlowGenerationViaCdp({
+        const drive = await driveFlowPackGeneration({
           cdpEndpoint,
+          seatId,
           prompt: fullPrompt,
-          imageUrl: Array.isArray(body.imageUrls) ? body.imageUrls[0] : body.productImageUrl,
           aspectRatio,
           durationSeconds: duration,
-          // Stable: longer poll, less CDP thrash (Flow 10s often 4–10 min)
-          pollMs: 6000,
-          pollRounds: 120, // ~12 min
-          extractRounds: 40,
+          flowVeo: hubMedia?.flowVeo,
+          // Honest wait: ~7.5 min max; early abort if pack stays quiet ~90s after grace
+          pollMs: 5000,
+          pollRounds: 90,
+          quietAbortRounds: 18,
+          quietGraceRounds: 6,
           onProgress: async (p) => {
             const now = Date.now()
-            if (now - lastProgressAt < 4000 && p.percent < 90)
+            if (now - lastProgressAt < 3500 && p.percent < 90)
               return
             lastProgressAt = now
             await patchTask(task.id, {
@@ -654,10 +660,10 @@ async function processDraftTask(task: LocalDraftTask, body: Record<string, any>)
                 title: `Flow · ${browserModel}`,
                 description: p.projectUrl
                   ? `Flow project: ${p.projectUrl}`
-                  : 'Driving Google Flow on browser seat…',
-                topics: ['browser', 'flow', 'veo'],
+                  : 'Flow Automation pack running on seat…',
+                topics: ['browser', 'flow', 'veo', 'pack'],
                 progress: {
-                  percent: Math.min(92, Math.max(15, p.percent)),
+                  percent: Math.min(92, Math.max(12, p.percent)),
                   stage: p.stage,
                   providerStatus: 'running',
                   updatedAt: new Date().toISOString(),
@@ -668,8 +674,8 @@ async function processDraftTask(task: LocalDraftTask, body: Record<string, any>)
                   model: browserModel,
                   seatId,
                   cdpEndpoint,
-                  runtime: 'flow_cdp_driver',
-                  phase: 'driving',
+                  runtime: 'flow_pack_driver',
+                  phase: 'pack_running',
                   duration,
                   aspectRatio,
                   projectUrl: p.projectUrl,
@@ -693,7 +699,7 @@ async function processDraftTask(task: LocalDraftTask, body: Record<string, any>)
               response: {
                 title: titleBase,
                 description: 'Archiving Flow video into content library…',
-                topics: ['browser', 'flow'],
+                topics: ['browser', 'flow', 'pack'],
                 progress: {
                   percent: 95,
                   stage: 'Saving video locally',
@@ -705,7 +711,7 @@ async function processDraftTask(task: LocalDraftTask, body: Record<string, any>)
                   model: browserModel,
                   seatId,
                   cdpEndpoint,
-                  runtime: 'flow_cdp_driver',
+                  runtime: 'flow_pack_driver',
                   phase: 'archiving',
                   projectUrl: drive.projectUrl,
                 },
@@ -728,8 +734,8 @@ async function processDraftTask(task: LocalDraftTask, body: Record<string, any>)
               || ''
             const description = drive.projectUrl
               ? `Generated on Google Flow · ${drive.projectUrl}`
-              : 'Generated on Google Flow via browser seat'
-            const topics = ['flow', 'veo', 'browser']
+              : 'Generated on Google Flow via Flow Automation pack'
+            const topics = ['flow', 'veo', 'browser', 'pack']
             const material = await persistGenerationMaterial(body, {
               title: titleBase,
               description,
@@ -764,7 +770,7 @@ async function processDraftTask(task: LocalDraftTask, body: Record<string, any>)
                 model: browserModel,
                 seatId,
                 cdpEndpoint,
-                runtime: 'flow_cdp_driver',
+                runtime: 'flow_pack_driver',
                 phase: 'completed',
                 projectUrl: drive.projectUrl,
                 drivePhase: drive.phase,
@@ -781,7 +787,7 @@ async function processDraftTask(task: LocalDraftTask, body: Record<string, any>)
             task.response = {
               title: `Flow · archive failed`,
               description: drive.projectUrl || task.errorMessage,
-              topics: ['browser', 'flow'],
+              topics: ['browser', 'flow', 'pack'],
               progress: {
                 percent: 90,
                 stage: 'Archive failed',
@@ -792,7 +798,7 @@ async function processDraftTask(task: LocalDraftTask, body: Record<string, any>)
                 provider: 'browser',
                 model: browserModel,
                 seatId,
-                runtime: 'flow_cdp_driver',
+                runtime: 'flow_pack_driver',
                 phase: 'archive_failed',
                 projectUrl: drive.projectUrl,
                 drive,
@@ -801,18 +807,17 @@ async function processDraftTask(task: LocalDraftTask, body: Record<string, any>)
           }
         }
         else if (drive.ok && ((drive.videoCount || 0) > 0 || (drive.tileCount || 0) > 0 || drive.generating)) {
-          // UI showed progress but no downloadable media — content management cannot complete
           task.status = 'failed'
           task.errorMessage
             = drive.error
-              || 'Flow showed tiles/video UI but no downloadable URL/blob. '
-              + 'Open the seat Flow project, download once, or re-run after login/PRO is ready.'
+              || 'Pack/Flow showed tiles/video but no downloadable media for content library. '
+              + 'Check seat download folder (SocialsHub/chatgpt-N) or pack auto-download.'
           task.response = {
-            title: `Flow · no media URL`,
+            title: `Flow · no media`,
             description: drive.projectUrl
               ? `Check seat browser: ${drive.projectUrl}`
               : (drive.textSample || task.errorMessage),
-            topics: ['browser', 'flow'],
+            topics: ['browser', 'flow', 'pack'],
             progress: {
               percent: 70,
               stage: 'No downloadable media for content library',
@@ -824,7 +829,7 @@ async function processDraftTask(task: LocalDraftTask, body: Record<string, any>)
               model: browserModel,
               seatId,
               cdpEndpoint,
-              runtime: 'flow_cdp_driver',
+              runtime: 'flow_pack_driver',
               phase: drive.phase,
               projectUrl: drive.projectUrl,
               drive,
@@ -836,13 +841,13 @@ async function processDraftTask(task: LocalDraftTask, body: Record<string, any>)
         else {
           task.status = 'failed'
           task.errorMessage = drive.error
-            || 'Flow CDP drive failed — login Google on a chatgpt-1..4 pool seat, check Flow PRO.'
+            || 'Flow pack mission failed — ensure Flow Automation is loaded on seat, project page open, Google PRO logged in.'
           task.response = {
             title: `Flow · failed`,
-            description: drive.textSample || drive.error || 'Could not submit prompt on Google Flow.',
-            topics: ['browser', 'flow'],
+            description: drive.textSample || drive.error || 'Pack did not produce media.',
+            topics: ['browser', 'flow', 'pack'],
             progress: {
-              percent: 20,
+              percent: drive.phase === 'pack_quiet_abort' ? 45 : 20,
               stage: `Failed · ${drive.phase}`,
               providerStatus: 'error',
               updatedAt: new Date().toISOString(),
@@ -852,7 +857,7 @@ async function processDraftTask(task: LocalDraftTask, body: Record<string, any>)
               model: browserModel,
               seatId,
               cdpEndpoint,
-              runtime: 'flow_cdp_driver',
+              runtime: 'flow_pack_driver',
               phase: drive.phase,
               projectUrl: drive.projectUrl,
               drive,

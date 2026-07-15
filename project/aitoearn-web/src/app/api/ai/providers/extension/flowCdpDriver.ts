@@ -59,7 +59,12 @@ function unwrapEval(r: any): any {
 /** Reject marketing banners / API noise (not user generations). */
 export function isJunkFlowMediaUrl(url: string): boolean {
   const u = String(url || '')
-  return /gstatic\.com\/aitestkitchen|banner|favicon|trpc|getFlowAppConfig|analytics|google-analytics/i.test(u)
+  // Real Flow media redirect (path includes trpc but is archivable)
+  if (/getMediaUrlRedirect|media\.getMediaUrlRedirect/i.test(u))
+    return false
+  return /gstatic\.com\/aitestkitchen|banner|favicon|getFlowAppConfig|analytics|google-analytics/i.test(u)
+    // bare trpc noise — but not media redirects (handled above)
+    || (/\/trpc\//i.test(u) && !/getMediaUrlRedirect/i.test(u))
 }
 
 /** Prefer https media URLs over blob; used by tests + driver. */
@@ -83,9 +88,10 @@ export function isArchivableFlowUrl(url: string | undefined | null): boolean {
     return false
   if (isJunkFlowMediaUrl(u))
     return false
-  // Prefer real media paths
+  // Prefer real media paths + Flow media redirect API
   return /\.(mp4|webm)(\?|$)/i.test(u)
     || /googlevideo\.com|videoplayback|storage\.googleapis\.com/i.test(u)
+    || /getMediaUrlRedirect|media\.getMediaUrlRedirect/i.test(u)
 }
 
 /**
@@ -94,7 +100,14 @@ export function isArchivableFlowUrl(url: string | undefined | null): boolean {
  */
 export function flowMediaScanExpression(): string {
   return `(() => {
-    const junk = (h) => /gstatic\\.com\\/aitestkitchen|banner|favicon|trpc|getFlowAppConfig|analytics/i.test(h || '');
+    const junk = (h) => {
+      const s = h || '';
+      if (/getMediaUrlRedirect/i.test(s)) return false;
+      return /gstatic\\.com\\/aitestkitchen|banner|favicon|getFlowAppConfig|analytics/i.test(s)
+        || (/\\/trpc\\//i.test(s) && !/getMediaUrlRedirect/i.test(s));
+    };
+    const isMedia = (h) => /\\.(mp4|webm)(\\?|$)/i.test(h)
+      || /googlevideo|videoplayback|storage\\.googleapis|getMediaUrlRedirect/i.test(h);
     const urls = [];
     for (const v of document.querySelectorAll('video')) {
       try { v.muted = true; v.play().catch(() => {}); } catch {}
@@ -108,15 +121,13 @@ export function flowMediaScanExpression(): string {
     for (const a of document.querySelectorAll('a[href]')) {
       const h = a.href || '';
       if (junk(h)) continue;
-      if (/\\.(mp4|webm)(\\?|$)/i.test(h) || /googlevideo|videoplayback/i.test(h))
-        urls.push(h);
+      if (isMedia(h)) urls.push(h);
     }
     try {
       for (const e of performance.getEntriesByType('resource')) {
         const n = e.name || '';
         if (junk(n)) continue;
-        if (/\\.(mp4|webm)(\\?|$)/i.test(n) || /googlevideo|videoplayback/i.test(n))
-          urls.push(n);
+        if (isMedia(n)) urls.push(n);
       }
     } catch {}
     const tiles = document.querySelectorAll('[data-tile-id]').length;
