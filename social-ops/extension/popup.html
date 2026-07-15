@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { width: 340px; margin: 0; padding: 12px; font: 12px/1.4 system-ui, sans-serif; color: #111; }
+      label { display: block; margin: 8px 0 3px; font-size: 11px; color: #555; }
+      input, select, button { width: 100%; box-sizing: border-box; height: 30px; border: 1px solid #ccc; border-radius: 6px; padding: 0 8px; font-size: 12px; }
+      button { margin-top: 8px; background: #111; color: white; border: 0; cursor: pointer; font-weight: 600; }
+      button.secondary { background: #f3f3f3; color: #111; border: 1px solid #ddd; }
+      pre { max-height: 140px; overflow: auto; white-space: pre-wrap; background: #f6f6f6; padding: 8px; font-size: 11px; border-radius: 6px; }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+      .status { font-size: 11px; margin-top: 6px; color: #0a7; }
+      .status.bad { color: #b00; }
+      h1 { font-size: 13px; margin: 0 0 4px; }
+      .hint { font-size: 11px; color: #666; margin-bottom: 8px; }
+    </style>
+  </head>
+  <body>
+    <h1>SocialOps Hub Bridge</h1>
+    <div class="hint">Auto-pairs with localhost:6061. Keep this extension loaded on the app-owned seat.</div>
+    <div id="status" class="status">Checking pair…</div>
+    <button id="pair" class="secondary">Pair with Hub now</button>
+    <label>API Base</label><input id="apiBase" placeholder="http://127.0.0.1:6061/api" />
+    <label>App JWT (optional on local)</label><input id="appToken" type="password" placeholder="optional" />
+    <div class="row">
+      <div><label>Provider</label><input id="providerId" placeholder="extension-bridge" /></div>
+      <div><label>Profile ID</label><input id="profileId" placeholder="primary" /></div>
+    </div>
+    <label>Bridge Token</label><input id="bridgeToken" type="password" placeholder="auto from pair-config" />
+    <button id="save">Save</button>
+    <div class="row">
+      <button id="beat" class="secondary">Heartbeat</button>
+      <button id="job" class="secondary">Run Next Job</button>
+    </div>
+    <pre id="out"></pre>
+    <script src="popup.js"></script>
+  </body>
+</html>
