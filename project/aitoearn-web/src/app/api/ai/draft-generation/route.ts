@@ -1,0 +1,2 @@
+import { getDraftTasks } from './_local'
+export async function GET(req: Request) { const url = new URL(req.url); const page = Number(url.searchParams.get('page') || 1); const pageSize = Number(url.searchParams.get('pageSize') || 10); const tasks = await getDraftTasks(); return Response.json({ code: 0, data: { page, pageSize, totalPages: Math.ceil(tasks.length / pageSize), total: tasks.length, list: tasks.slice((page - 1) * pageSize, page * pageSize) }, message: 'ok', url: '/api/ai/draft-generation' }) }
