@@ -63,6 +63,13 @@ export interface MaterialGenerationParams extends DraftGenerationRequest {
   platforms?: PlatType[]
   draftType?: VideoDraftType | ImageTextDraftType
   videoUrls?: string[]
+  /** Product photo used as I2V ref / list thumbnail */
+  productImageUrl?: string
+  productTitle?: string
+  productUrl?: string
+  flow?: string
+  platformPacks?: Record<string, unknown>
+  genImage?: boolean
 }
 
 /** 推广素材（原草稿） */

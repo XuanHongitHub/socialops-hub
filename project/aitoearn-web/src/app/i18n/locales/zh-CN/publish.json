@@ -24,7 +24,8 @@
     "cancelText": "不恢复"
   },
   "buttons": {
-    "customizePerAccount": "下一步",
+    "customizePerAccount": "各渠道设置",
+    "fullChannelReview": "完整检查",
     "cancel": "取消",
     "cancelPublish": "取消发布",
     "schedulePublish": "定时发布",
@@ -48,7 +49,8 @@
     "selectAccount": "请选择要发布的账户",
     "emptyChannel": "该频道暂无账户",
     "noAccount": "还没有添加账户，先去添加频道吧",
-    "addChannel": "添加频道"
+    "addChannel": "添加频道",
+    "clickChannelToConfigure": "点击渠道展开：Post/Reel、隐私、Board…"
   },
   "status": {
     "publishFailed": "发布失败",

@@ -1,0 +1,27 @@
+{
+  "notes": "Patches in custom/patches; overlays in custom/overlays. No '_' folder names.",
+  "skipNamePrefixes": [
+    "_"
+  ],
+  "extensionId": "jlhacppkbcmonaanlkbgipimelfbjgpb",
+  "preferredProfiles": [
+    "Profile 6"
+  ],
+  "autoUpdate": {
+    "enabled": true,
+    "intervalMinutes": 60,
+    "reapplyPatchesIfSameVersion": false
+  },
+  "preservePaths": [
+    "custom",
+    "update.ps1",
+    "update.cmd",
+    ".git",
+    ".gitignore"
+  ],
+  "chromeUserDataCandidates": [
+    "%LOCALAPPDATA%\\Google\\Chrome\\User Data",
+    "%LOCALAPPDATA%\\Google\\Chrome Beta\\User Data",
+    "%LOCALAPPDATA%\\Chromium\\User Data"
+  ]
+}

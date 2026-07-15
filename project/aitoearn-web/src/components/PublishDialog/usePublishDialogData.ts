@@ -169,20 +169,19 @@ export const usePublishDialogData = create(
         },
         // 获取Pinterest Board列表
         async getPinterestBoards(forceRefresh = false, accountId?: string) {
-          if (!forceRefresh && get().pinterestBoards.length !== 0)
-            return
+          // Always refresh when a specific account is requested (multi-account publish)
+          if (!forceRefresh && !accountId && get().pinterestBoards.length !== 0)
+            return get().pinterestBoards
 
           let pinterestAccount
 
           if (accountId) {
-            // 如果提供了账户ID，使用指定的账户
             pinterestAccount = useAccountStore
               .getState()
               .accountList
               .find(v => v.id === accountId && v.type === PlatType.Pinterest)
           }
           else {
-            // 如果没有提供账户ID，使用第一个找到的Pinterest账户（保持向后兼容）
             pinterestAccount = useAccountStore
               .getState()
               .accountList
@@ -191,17 +190,34 @@ export const usePublishDialogData = create(
 
           if (!pinterestAccount) {
             console.warn('没有找到Pinterest账户')
-            return
+            return []
           }
 
-          const res: any = await getPinterestBoardListApi(
-            { page: 1, size: 100 },
-            pinterestAccount.id,
-          )
-          set({
-            pinterestBoards: res?.data?.list || [],
-          })
-          return res?.data?.list
+          try {
+            const res: any = await getPinterestBoardListApi(
+              { page: 1, size: 100 },
+              pinterestAccount.id,
+            )
+            // Tolerate local + remote shapes: { list }, { items }, bare array
+            const raw = res?.data?.list ?? res?.data?.items ?? res?.data ?? []
+            const boards = (Array.isArray(raw) ? raw : [])
+              .map((b: any) => ({
+                id: String(b?.id || b?.board_id || ''),
+                name: String(b?.name || b?.title || 'Board'),
+                description: b?.description,
+                privacy: b?.privacy,
+              }))
+              .filter((b: { id: string }) => Boolean(b.id))
+            set({
+              pinterestBoards: boards,
+            })
+            return boards
+          }
+          catch (e) {
+            console.warn('[getPinterestBoards]', e)
+            set({ pinterestBoards: [] })
+            return []
+          }
         },
       }
 

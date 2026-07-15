@@ -10,7 +10,7 @@
 'use client'
 
 import type { SocialAccount } from '@/api/types/account.type'
-import { BarChart3, Loader2, RefreshCw, Trash2 } from 'lucide-react'
+import { BarChart3, ExternalLink, Loader2, RefreshCw, Trash2 } from 'lucide-react'
 import Image from 'next/image'
 
 import { useState } from 'react'
@@ -32,6 +32,34 @@ interface ChannelItemProps {
   deleteLoading?: string | null
 }
 
+function cleanHandle(value?: string) {
+  return (value || '').trim().replace(/^@/, '')
+}
+
+function getChannelUrl(channel: SocialAccount, fallbackUrl?: string) {
+  const handle = cleanHandle(channel.account || channel.nickname)
+  switch (channel.type) {
+    case PlatType.Tiktok:
+      return handle ? `https://www.tiktok.com/@${handle}` : fallbackUrl
+    case PlatType.YouTube:
+      return handle ? `https://www.youtube.com/${handle.startsWith('@') ? handle : `@${handle}`}` : fallbackUrl
+    case PlatType.Facebook:
+      return channel.uid ? `https://www.facebook.com/${channel.uid}` : fallbackUrl
+    case PlatType.Instagram:
+      return handle ? `https://www.instagram.com/${handle}/` : fallbackUrl
+    case PlatType.Pinterest:
+      return handle ? `https://www.pinterest.com/${handle}/` : fallbackUrl
+    case PlatType.Twitter:
+      return handle ? `https://x.com/${handle}` : fallbackUrl
+    case PlatType.Threads:
+      return handle ? `https://www.threads.net/@${handle}` : fallbackUrl
+    case PlatType.LinkedIn:
+      return handle ? `https://www.linkedin.com/in/${handle}` : fallbackUrl
+    default:
+      return fallbackUrl
+  }
+}
+
 export function ChannelItem({ channel, onDelete, deleteLoading }: ChannelItemProps) {
   const platInfo = AccountPlatInfoMap.get(channel.type)
   const isDeleting = deleteLoading === channel.id
@@ -40,6 +68,7 @@ export function ChannelItem({ channel, onDelete, deleteLoading }: ChannelItemPro
   const { t } = useTransClient('account')
   const openAndAuth = useChannelManagerStore(state => state.openAndAuth)
   const [analyticsOpen, setAnalyticsOpen] = useState(false)
+  const channelUrl = getChannelUrl(channel, platInfo?.url)
 
   // 处理重新授权
   const handleReauth = () => {
@@ -63,8 +92,23 @@ export function ChannelItem({ channel, onDelete, deleteLoading }: ChannelItemPro
       </Avatar>
 
       <div className="min-w-0 flex-1">
-        <div data-testid="cm-channel-name" className={cn('truncate text-base font-semibold leading-5 text-foreground', isOffline && 'text-muted-foreground')}>
-          {channel.nickname || channel.account}
+        <div className="flex min-w-0 items-center gap-1.5">
+          <div data-testid="cm-channel-name" className={cn('truncate text-base font-semibold leading-5 text-foreground', isOffline && 'text-muted-foreground')}>
+            {channel.nickname || channel.account}
+          </div>
+          {channelUrl && (
+            <a
+              data-testid="cm-channel-open-link"
+              href={channelUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              title={t('channelManager.openChannel') || 'Open channel'}
+              onClick={event => event.stopPropagation()}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          )}
         </div>
         <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
           {channel.account && channel.nickname && (

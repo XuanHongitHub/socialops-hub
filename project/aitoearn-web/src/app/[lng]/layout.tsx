@@ -95,6 +95,23 @@ export default async function RootLayout({
       <body suppressHydrationWarning>
         {/* Rewardful 脚本 */}
         <Script
+          id="remove-platform-region-gate"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `(() => {
+              const removeGate = () => {
+                document.querySelectorAll('[role="alertdialog"]').forEach((dialog) => {
+                  if (dialog.textContent && dialog.textContent.includes('Platform Region Restriction')) {
+                    dialog.remove();
+                  }
+                });
+              };
+              removeGate();
+              new MutationObserver(removeGate).observe(document.documentElement, { childList: true, subtree: true });
+            })();`,
+          }}
+        />
+        <Script
           id="rewardful-init"
           strategy="afterInteractive"
           dangerouslySetInnerHTML={{

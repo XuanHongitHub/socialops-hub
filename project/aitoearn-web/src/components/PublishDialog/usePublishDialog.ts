@@ -10,6 +10,7 @@ import {
   PlatType,
 } from '@/app/config/platConfig'
 import { PubType } from '@/app/config/publishConfig'
+import { getPreferredContentCategory } from '@/components/PublishDialog/publishChannelPrefs'
 import { debugPublishDialog, getSocialAccountIdentityKeys, isSameSocialAccount } from '@/components/PublishDialog/PublishDialog.util'
 import { usePublishDialogStorageStore } from '@/components/PublishDialog/usePublishDialogStorageStore'
 
@@ -70,8 +71,12 @@ function getStore() {
   return lodash.cloneDeep(store)
 }
 
-function getDefaultContentCategory(params: Pick<IPubParams, 'video'>) {
-  return params.video ? 'reel' : 'post'
+function getDefaultContentCategory(
+  platform: 'instagram' | 'facebook',
+  params: Pick<IPubParams, 'video'>,
+) {
+  // Last saved preference → Post default (BugSell feed), not auto-Reels
+  return getPreferredContentCategory(platform, Boolean(params.video))
 }
 
 function dedupePublishAccounts(accounts: SocialAccount[]) {
@@ -93,14 +98,14 @@ function normalizePlatformOptions(accountType: SocialAccount['type'], params: IP
   if (accountType === PlatType.Instagram && !option.instagram?.content_category) {
     option.instagram = {
       ...option.instagram,
-      content_category: getDefaultContentCategory(params),
+      content_category: getDefaultContentCategory('instagram', params),
     }
   }
 
   if (accountType === PlatType.Facebook && !option.facebook?.content_category) {
     option.facebook = {
       ...option.facebook,
-      content_category: getDefaultContentCategory(params),
+      content_category: getDefaultContentCategory('facebook', params),
     }
   }
 
@@ -164,6 +169,22 @@ function getPubItemByAccount(target: Map<string, PubItem>, account: SocialAccoun
   }
 
   return undefined
+}
+
+function getForcedPublishPlatform() {
+  if (typeof window === 'undefined')
+    return undefined
+
+  return new URLSearchParams(window.location.search).get('platform')?.toLowerCase()
+}
+
+function applyForcedPublishPlatform(pubList: PubItem[], selected: PubItem[]) {
+  const platform = getForcedPublishPlatform()
+  if (!platform)
+    return selected
+
+  const forced = pubList.filter(pubItem => String(pubItem.account.type).toLowerCase() === platform)
+  return forced.length ? forced : selected
 }
 
 export const usePublishDialog = create(
@@ -247,20 +268,21 @@ export const usePublishDialog = create(
             })
           })
 
-          if (defaultAccountIds && defaultAccountIds.length > 0) {
-            // 过滤掉离线账号（status === 0）和区域不可用的平台
-            const validIds = defaultAccountIds.filter((id) => {
-              const acc = filteredAccounts.find(a => a.id === id)
-              return acc && acc.status !== AccountStatus.DISABLE
-            })
+          const validIds = defaultAccountIds?.filter((id) => {
+            const acc = filteredAccounts.find(a => a.id === id)
+            return acc && acc.status !== AccountStatus.DISABLE
+          }) ?? []
 
-            const chosen = pubList.filter(p => validIds.includes(p.account.id))
+          const selected = validIds.length > 0
+            ? pubList.filter(p => validIds.includes(p.account.id))
+            : []
+          const chosen = applyForcedPublishPlatform(pubList, selected)
+
+          if (chosen.length > 0) {
             methods.setPubListChoosed(chosen)
-
-            // 如果只有一个，设置为 expandedPubItem
-            if (chosen.length === 1) {
-              set({ expandedPubItem: chosen[0] })
-            }
+            // Always expand first selected account so Preview + per-channel panel have a focus
+            // (multi-select used to leave expandedPubItem empty → blank preview until toggle)
+            set({ expandedPubItem: chosen[0] })
           }
 
           set({
@@ -329,12 +351,22 @@ export const usePublishDialog = create(
           nextPubList.forEach((pubItem) => {
             setPubItemIdentityMap(nextPubItemMap, pubItem)
           })
-          const nextPubListChoosed = currentPubListChoosed
+          const nextPubListChoosed = applyForcedPublishPlatform(nextPubList, currentPubListChoosed
             .map(pubItem => getPubItemByAccount(nextPubItemMap, pubItem.account))
-            .filter((pubItem): pubItem is PubItem => Boolean(pubItem))
-          const nextExpandedPubItem = currentExpandedPubItem
+            .filter((pubItem): pubItem is PubItem => Boolean(pubItem)))
+          let nextExpandedPubItem = currentExpandedPubItem
             ? getPubItemByAccount(nextPubItemMap, currentExpandedPubItem.account)
             : undefined
+          // Keep a focused account whenever selection is non-empty
+          if (!nextExpandedPubItem && nextPubListChoosed.length > 0)
+            nextExpandedPubItem = nextPubListChoosed[0]
+          else if (
+            nextExpandedPubItem
+            && !nextPubListChoosed.some(p => p.account.id === nextExpandedPubItem!.account.id)
+            && nextPubListChoosed.length > 0
+          ) {
+            nextExpandedPubItem = nextPubListChoosed[0]
+          }
 
           debugPublishDialog('syncAccounts:next', {
             nextPubList: nextPubList.map(pubItem => ({
@@ -425,13 +457,17 @@ export const usePublishDialog = create(
             return v
           })
 
+          const prevExpanded = get().expandedPubItem
+          const nextExpanded = prevExpanded
+            ? pubList.find(v => v.account.id === prevExpanded.account.id)
+            : (pubListChoosed[0] || pubList.find(v => v.params.video || (v.params.images?.length ?? 0) > 0) || pubList[0])
+
           set({
             pubList,
             commonPubParams,
             pubListChoosed,
-            expandedPubItem: get().expandedPubItem
-              ? pubList.find(v => v.account.id === get().expandedPubItem!.account.id)
-              : undefined,
+            // Always keep an expanded account so Preview pane can show draft media
+            expandedPubItem: nextExpanded,
           })
         },
 

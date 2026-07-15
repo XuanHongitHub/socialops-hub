@@ -4,7 +4,7 @@
 
 import { cn } from '@/lib/utils'
 
-export const BRAND_TITLE = 'AitoEarn'
+export const BRAND_TITLE = 'Socials Hub'
 
 type BrandWordmarkTag = 'h1' | 'span'
 type BrandWordmarkSize = 'sidebar' | 'mobile'
@@ -16,13 +16,8 @@ export interface BrandWordmarkProps {
 }
 
 const WORDMARK_SIZE_CLASSNAME: Record<BrandWordmarkSize, string> = {
-  sidebar: 'text-[1.05rem] tracking-[-0.045em]',
-  mobile: 'text-base tracking-[-0.04em]',
-}
-
-const ANCHOR_SIZE_CLASSNAME: Record<BrandWordmarkSize, string> = {
-  sidebar: 'text-[1.1em]',
-  mobile: 'text-[1.08em]',
+  sidebar: 'text-[1.05rem] tracking-[-0.025em]',
+  mobile: 'text-base tracking-[-0.02em]',
 }
 
 export function BrandWordmark({
@@ -35,29 +30,13 @@ export function BrandWordmark({
   return (
     <Component
       className={cn(
-        'm-0 flex select-none items-baseline whitespace-nowrap font-semibold leading-none',
+        'm-0 select-none whitespace-nowrap bg-gradient-back bg-clip-text font-bold leading-none text-transparent',
         WORDMARK_SIZE_CLASSNAME[size],
         className,
       )}
       aria-label={BRAND_TITLE}
     >
-      <span
-        className={cn(
-          'inline-block font-bold text-foreground transition-transform duration-300 group-hover/logo:-translate-y-px',
-          ANCHOR_SIZE_CLASSNAME[size],
-        )}
-      >
-        A
-      </span>
-      <span className="text-foreground/90">ito</span>
-      <span
-        className={cn(
-          'inline-flex items-baseline bg-gradient-back bg-clip-text text-transparent transition-transform duration-300 group-hover/logo:translate-x-px',
-        )}
-      >
-        <span className={cn('inline-block font-bold', ANCHOR_SIZE_CLASSNAME[size])}>E</span>
-        <span>arn</span>
-      </span>
+      {BRAND_TITLE}
     </Component>
   )
 }

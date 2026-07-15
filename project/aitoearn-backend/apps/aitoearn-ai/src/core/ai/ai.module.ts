@@ -4,24 +4,28 @@ import { AideoModule } from './aideo'
 import { AssetsModule } from './assets'
 import { ChatModule } from './chat'
 import { ImageModule } from './image'
+import { GeminiModule } from './libs/gemini'
 import { OpenaiModule } from './libs/openai'
 import { LogsModule } from './logs'
 import { ModelsConfigModule } from './models-config'
+import { ProvidersModule } from './providers'
 import { VideoModule } from './video'
 
 @Module({
   imports: [
     OpenaiModule.forRoot(config.ai.openai),
+    GeminiModule.forRoot(config.ai.gemini),
     ChatModule,
     LogsModule,
     ImageModule,
     VideoModule,
     AideoModule,
     ModelsConfigModule,
+    ProvidersModule,
     AssetsModule,
   ],
   controllers: [],
   providers: [],
-  exports: [ChatModule, LogsModule, ImageModule, VideoModule, AideoModule, ModelsConfigModule, AssetsModule],
+  exports: [ChatModule, LogsModule, ImageModule, VideoModule, AideoModule, ModelsConfigModule, ProvidersModule, AssetsModule],
 })
 export class AiModule { }

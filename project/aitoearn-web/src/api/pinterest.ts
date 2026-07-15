@@ -5,9 +5,9 @@ export function createPinterestBoardApi(data: any, accountId: string) {
   return http.post<any>('plat/pinterest/board', { ...data, accountId })
 }
 
-// 获取board列表信息
+// 获取board列表信息 (silent — soft-fail empty list, no global 500 toast)
 export function getPinterestBoardListApi(params: any, accountId: string) {
-  return http.get<any>('plat/pinterest/board', { ...params, accountId })
+  return http.get<any>('plat/pinterest/board', { ...params, accountId }, true)
 }
 
 // 获取单个board

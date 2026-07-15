@@ -127,9 +127,10 @@ export class ChatService {
       modalities: params.modalities as OpenAIClient.Chat.ChatCompletionModality[],
     })
 
-    const usage = result.usage_metadata
-    if (!usage) {
-      throw new AppException(ResponseCode.AiCallFailed, { error: 'Missing usage metadata' })
+    const usage = result.usage_metadata ?? {
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 0,
     }
 
     // 处理返回的 content 中的 base64 图片

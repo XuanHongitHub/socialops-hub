@@ -216,6 +216,7 @@ export interface IWorkflowStep {
 export interface IPendingTask {
   prompt: string
   medias: IUploadedMedia[]
+  model?: string
 }
 
 /** 单个任务的消息数据（按任务ID隔离存储） */
@@ -305,6 +306,8 @@ export interface ICreateTaskParams {
   prompt: string
   /** 媒体文件列表 */
   medias?: IUploadedMedia[]
+  /** AI model */
+  model?: string
   /** 翻译函数 */
   t: (key: string) => string
   /** taskId 获取成功回调 */

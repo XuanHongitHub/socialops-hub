@@ -50,7 +50,8 @@ const PinterestParams = memo(
       const [creatingBoard, setCreatingBoard] = useState(false)
 
       useEffect(() => {
-        getPinterestBoards(false, pubItem.account.id)
+        // Force refresh per account so multi-account publish picks the right boards
+        void getPinterestBoards(true, pubItem.account.id)
       }, [getPinterestBoards, pubItem.account.id])
 
       // 初始化Pinterest参数

@@ -24,6 +24,12 @@ import { confirm } from '@/lib/confirm'
 import { toast } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 import { getOssUrl } from '@/utils/oss'
+import {
+  SOCIAL_OPS_EMPTY_DESC_CLASS,
+  SOCIAL_OPS_EMPTY_ICON_CLASS,
+  SOCIAL_OPS_EMPTY_TITLE_CLASS,
+  SOCIAL_OPS_EMPTY_WRAP_CLASS,
+} from '@/lib/socialOps/socialOpsShell'
 import { useDraftReferenceMaxImages } from '../../hooks/useDraftReferenceMaxImages'
 import { useTransferDraftDialogStore } from '../../transferDraftDialogStore'
 import { useMediaTabStore } from '../ContentTabs/mediaTabStore'
@@ -79,7 +85,27 @@ const AllDraftCard = memo(({ material, onClick, batchMode, selected, onToggleSel
   selected?: boolean
   onToggleSelect?: () => void
 }) => {
-  const coverUrl = material.coverUrl || '/images/placeholder.png'
+  const videoUrl = material.mediaList?.find(m => m.type === 'video')?.url
+  const productStill = typeof material.generationParams?.productImageUrl === 'string'
+    ? material.generationParams.productImageUrl
+    : ''
+  // Prefer extracted poster / real cover; product still alone makes every SKU look identical.
+  const coverUrl = (material.coverUrl && !/\.mp4($|\?)/i.test(material.coverUrl))
+    ? material.coverUrl
+    : (material.mediaList?.find(m => m.type === 'img')?.url)
+      || productStill
+      || '/images/placeholder.png'
+  const isVideo = Boolean(videoUrl) || material.type === 'video' || material.mediaList?.some(m => m.type === 'video')
+  const coverIsProductStill = Boolean(
+    productStill
+    && coverUrl
+    && (coverUrl === productStill || coverUrl.includes(String(productStill).slice(-48))),
+  )
+  const isPosterCover = /^\/api\/assets\/poster\//.test(coverUrl)
+  // Show a video frame when we only have the shared product still (hard to tell clips apart).
+  const preferVideoFrame = Boolean(isVideo && videoUrl && (!material.coverUrl || coverIsProductStill) && !isPosterCover)
+  const durationSec = Number(material.generationParams?.duration)
+  const durationLabel = Number.isFinite(durationSec) && durationSec > 0 ? `${Math.round(durationSec)}s` : ''
 
   const handleClick = useCallback(() => {
     if (batchMode) {
@@ -113,17 +139,42 @@ const AllDraftCard = memo(({ material, onClick, batchMode, selected, onToggleSel
         </div>
       )}
 
-      <div className="relative w-full overflow-hidden rounded-xl">
-        <LazyImage
-          src={coverUrl}
-          alt={material.title || ''}
-          width={400}
-          height={300}
-          className="w-full h-auto transition-transform duration-300 group-hover:scale-105"
-          skeletonClassName="rounded-xl"
-          placeholderHeight={150}
-          style={{ aspectRatio: 'auto' }}
-        />
+      <div className="relative w-full overflow-hidden rounded-xl bg-muted">
+        {preferVideoFrame && videoUrl
+          ? (
+              <video
+                src={`${getOssUrl(videoUrl)}#t=1.2`}
+                poster={productStill || undefined}
+                className="w-full h-auto max-h-[280px] object-cover transition-transform duration-300 group-hover:scale-105"
+                muted
+                playsInline
+                preload="metadata"
+              />
+            )
+          : (
+              <LazyImage
+                src={coverUrl.startsWith('http') || coverUrl.startsWith('/') ? coverUrl : getOssUrl(coverUrl)}
+                alt={material.title || ''}
+                width={400}
+                height={300}
+                className="w-full h-auto transition-transform duration-300 group-hover:scale-105"
+                skeletonClassName="rounded-xl"
+                placeholderHeight={150}
+                style={{ aspectRatio: 'auto' }}
+              />
+            )}
+        {isVideo && (
+          <div className="absolute bottom-2 left-2 flex items-center gap-1">
+            <span className="rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+              Video
+            </span>
+            {durationLabel && (
+              <span className="rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white/90">
+                {durationLabel}
+              </span>
+            )}
+          </div>
+        )}
         {!batchMode && material.desc && (
           <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-3 rounded-xl">
             <p className="text-white text-xs line-clamp-4">
@@ -166,13 +217,19 @@ export const AllListSection = memo(({ materialGroupId, showBatchDeleteTrigger = 
   const generationTasks = usePlanDetailStore(state => state.generationTasks)
   const openDraftDetailDialog = usePlanDetailStore(state => state.openDraftDetailDialog)
   const openGenerationDetailDialog = usePlanDetailStore(state => state.openGenerationDetailDialog)
+  const dismissGenerationTasks = usePlanDetailStore(state => state.dismissGenerationTasks)
+  const cancelGenerationTask = usePlanDetailStore(state => state.cancelGenerationTask)
+  const retryGenerationTask = usePlanDetailStore(state => state.retryGenerationTask)
 
-  const { mergedList, loading, initialized, allExhausted } = useMediaTabStore(
+  const { mergedList, loading, initialized, allExhausted, draftTotal, videoTotal, uniqueTotal } = useMediaTabStore(
     useShallow(state => ({
       mergedList: state.all.mergedList,
       loading: state.all.loading,
       initialized: state.all.initialized,
       allExhausted: state.all.allExhausted,
+      draftTotal: state.all.draftTotal,
+      videoTotal: state.all.videoTotal,
+      uniqueTotal: state.all.uniqueTotal,
     })),
   )
 
@@ -219,6 +276,25 @@ export const AllListSection = memo(({ materialGroupId, showBatchDeleteTrigger = 
       fetchAllList(materialGroupId, currentPlan.id)
     }
   }, [initialized, materialGroupId, currentPlan, fetchAllList])
+
+  // Recovery once: badge/totals say items exist but list is empty (stale race / failed silent refresh)
+  const recoverAttemptedRef = useRef<string>('')
+  useEffect(() => {
+    if (!initialized || loading || !materialGroupId || !currentPlan)
+      return
+    if (mergedList.length > 0) {
+      recoverAttemptedRef.current = ''
+      return
+    }
+    const claimed = uniqueTotal > 0 ? uniqueTotal : (draftTotal + videoTotal)
+    if (claimed <= 0)
+      return
+    const key = `${materialGroupId}:${claimed}`
+    if (recoverAttemptedRef.current === key)
+      return
+    recoverAttemptedRef.current = key
+    void fetchAllList(materialGroupId, currentPlan.id, true)
+  }, [initialized, loading, mergedList.length, uniqueTotal, draftTotal, videoTotal, materialGroupId, currentPlan, fetchAllList])
 
   // IntersectionObserver 无限滚动
   useEffect(() => {
@@ -334,17 +410,17 @@ export const AllListSection = memo(({ materialGroupId, showBatchDeleteTrigger = 
     )
   }
 
-  // 空状态
+  // 空状态 — shared SocialOps empty shell
   if (initialized && mergedList.length === 0 && !showGenerationTasks) {
     return (
-      <div className="flex flex-col items-center justify-center py-12">
-        <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-          <Inbox className="w-8 h-8 text-muted-foreground" />
+      <div className={SOCIAL_OPS_EMPTY_WRAP_CLASS} data-testid="all-list-empty">
+        <div className={SOCIAL_OPS_EMPTY_ICON_CLASS}>
+          <Inbox className="h-7 w-7" />
         </div>
-        <p className="text-sm font-medium text-foreground mb-1">
+        <p className={SOCIAL_OPS_EMPTY_TITLE_CLASS}>
           {t('mediaManagement.noMedia')}
         </p>
-        <p className="text-sm text-muted-foreground">
+        <p className={SOCIAL_OPS_EMPTY_DESC_CLASS}>
           {t('mediaManagement.noMediaDesc')}
         </p>
       </div>
@@ -414,7 +490,14 @@ export const AllListSection = memo(({ materialGroupId, showBatchDeleteTrigger = 
         columnClassName="pl-4 bg-clip-padding"
       >
         {showGenerationTasks && visibleGenerationTasks.map(task => (
-          <GeneratingTaskCard key={task.id} task={task} onClick={openGenerationDetailDialog} />
+          <GeneratingTaskCard
+            key={task.id}
+            task={task}
+            onClick={openGenerationDetailDialog}
+            onDismiss={id => dismissGenerationTasks([id])}
+            onCancel={id => void cancelGenerationTask(id)}
+            onRetry={id => void retryGenerationTask(id)}
+          />
         ))}
         {mergedList.map((item) => {
           if (item.source === 'draft') {

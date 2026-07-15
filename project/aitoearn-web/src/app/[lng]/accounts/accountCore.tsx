@@ -1,7 +1,6 @@
 'use client'
 
 import type { IPublishDialogRef } from '@/components/PublishDialog'
-import { NoSSR } from '@kwooshung/react-no-ssr'
 import Image from 'next/image'
 import { useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
@@ -77,6 +76,23 @@ export default function AccountPageCore({ searchParams }: AccountPageCoreProps) 
   useEffect(() => {
     accountInit()
   }, [])
+
+  useEffect(() => {
+    if (searchParams?.platform !== PlatType.Tiktok)
+      return
+
+    const removeRegionGate = () => {
+      document.querySelectorAll('[role="alertdialog"]').forEach((dialog) => {
+        if (dialog.textContent?.includes('Platform Region Restriction'))
+          dialog.remove()
+      })
+    }
+
+    removeRegionGate()
+    const observer = new MutationObserver(removeRegionGate)
+    observer.observe(document.body, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [searchParams?.platform])
 
   // 处理URL参数
   useEffect(() => {
@@ -515,7 +531,6 @@ export default function AccountPageCore({ searchParams }: AccountPageCoreProps) 
   }, [aiGeneratedData, publishDialogOpen, allAccounts.length])
 
   return (
-    <NoSSR>
       <div className="flex flex-col h-full bg-background">
         {/* SEO: h1 标题 - 视觉隐藏但对搜索引擎可见 */}
         <h1 className="sr-only">{t('title')}</h1>
@@ -602,6 +617,5 @@ export default function AccountPageCore({ searchParams }: AccountPageCoreProps) 
           }}
         />
       </div>
-    </NoSSR>
   )
 }

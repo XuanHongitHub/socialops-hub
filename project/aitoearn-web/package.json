@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "postinstall": "node scripts/copy-tinymce-assets.mjs",
-    "dev": "next dev -p 6061",
+    "dev": "cross-env SOCIALOPS_LOCAL_MODE=1 next dev -p 6061",
     "dev:local": "cross-env NEXT_PUBLIC_API_URL=http://localhost:7001/api next dev",
-    "build": "next build",
+    "live": "cross-env SOCIALOPS_LOCAL_MODE=1 next build && cross-env SOCIALOPS_LOCAL_MODE=1 next start -p 6061",
+    "build": "cross-env SOCIALOPS_LOCAL_MODE=1 next build",
     "type-check": "tsc --noEmit",
     "test": "playwright test",
     "test:ui": "playwright test --ui",

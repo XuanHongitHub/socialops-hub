@@ -28,6 +28,10 @@ export interface MediaItem {
   url: string
   /** 缩略图 URL（视频封面/图片缩略图） */
   thumbUrl: string
+  /** Optional cover (local flatten / generation) */
+  coverUrl?: string
+  /** Parent draft material when media is flattened from generation */
+  materialId?: string
   /** 文件标题 */
   title: string
   /** 描述 */

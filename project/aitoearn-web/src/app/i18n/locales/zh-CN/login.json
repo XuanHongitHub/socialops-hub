@@ -1,8 +1,8 @@
 {
   "seo": {
     "loginTitle": "登录 - 进入您的AI内容创作工作台",
-    "loginKeywords": "登录, 注册, AiToEarn账号, AI平台登录, 创作者登录, 社媒管理登录",
-    "loginDescription": "登录 AiToEarn 账户，开始您的 AI 创作之旅。支持手机验证码登录和邮箱验证码登录。"
+    "loginKeywords": "登录, 注册, Socials Hub账号, AI平台登录, 创作者登录, 社媒管理登录",
+    "loginDescription": "登录 Socials Hub 账户，开始您的 AI 创作之旅。支持手机验证码登录和邮箱验证码登录。"
   },
   "welcomeBack": "登录",
   "loginSubtitle": "用AI，赚点钱",
@@ -35,3 +35,4 @@
   "newUserPromotion": "新用户登录就送14天会员，免费用！",
   "manualLoginDisabledNotice": "当前环境无需手动登录。若仍无法访问，请检查配置。"
 }
+

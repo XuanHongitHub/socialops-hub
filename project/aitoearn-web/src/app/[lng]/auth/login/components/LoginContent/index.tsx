@@ -63,7 +63,13 @@ export default function LoginContent() {
           href="/"
           className="flex items-center gap-2 text-foreground no-underline hover:opacity-80 transition-opacity"
         >
-          <Image src={logo} alt="AiToEarn" width={28} height={28} />
+          <Image
+            src={logo}
+            alt="AiToEarn"
+            width={40}
+            height={40}
+            className="h-10 w-10 rounded-xl object-cover shadow-sm ring-1 ring-border/60"
+          />
           <span className="text-lg font-semibold tracking-tight">AiToEarn</span>
         </Link>
       </div>
@@ -81,14 +87,15 @@ export default function LoginContent() {
           <div className="mb-8 flex flex-col items-center">
             <Link
               href="/"
-              className="mb-6 flex h-20 w-20 items-center justify-center hover:opacity-80 transition-opacity"
+              className="mb-6 flex h-24 w-24 items-center justify-center hover:opacity-80 transition-opacity"
             >
               <Image
                 src={logo}
                 alt="AiToEarn"
-                width={72}
-                height={72}
-                className="drop-shadow-md"
+                width={96}
+                height={96}
+                className="h-24 w-24 rounded-2xl object-cover shadow-md ring-1 ring-border/50 drop-shadow-md"
+                priority
               />
             </Link>
             <p className="mt-2 text-muted-foreground">{t('loginSubtitle')}</p>

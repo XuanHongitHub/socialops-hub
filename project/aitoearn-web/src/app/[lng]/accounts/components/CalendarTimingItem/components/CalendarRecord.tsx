@@ -55,7 +55,7 @@ const CalendarRecord = memo(
           const newTimeStr = getDays(dropResult!.time.date).format('YYYY-MM-DD')
 
           // 原始时间
-          const oldDate = dayjs(item.publishRecord.publishTime)
+          const oldDate = getDays(item.publishRecord.publishTime)
           // 新日期（只取年月日）
           const newDate = dayjs(dropResult!.time.date)
 

@@ -2,10 +2,10 @@ import type { Metadata } from 'next'
 import { getHreflang, languages } from '@/lib/i18n/languageConfig'
 
 export async function getPageTitle(name: string, lng: string) {
-  return `AiToEarn - ${name}`
+  return `Socials Hub - ${name}`
 }
 
-const BRAND_KEYWORDS = ['AiToEarn', 'aitoearn', 'Ai To Earn', 'ai to earn', 'AITOEARN', 'earn']
+const BRAND_KEYWORDS = ['Socials Hub', 'socialops', 'social media management', 'content publishing']
 
 /** 确保品牌关键词变体在 keywords 最前面，避免重复 */
 function prependBrandKeyword(keywords: Metadata['keywords']): string {
@@ -65,7 +65,7 @@ export async function getMetadata(props: Metadata, lng: string, path?: string): 
       title,
       description,
       url: `${baseUrl}/${lng}${path}`,
-      siteName: 'AiToEarn',
+      siteName: 'Socials Hub',
       locale: lng,
       type: 'website',
       images: [
@@ -100,3 +100,5 @@ export async function getMetadata(props: Metadata, lng: string, path?: string): 
     },
   }
 }
+
+

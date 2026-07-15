@@ -1,0 +1,32 @@
+# SocialOps Provider Plan
+
+- [x] Audit current provider/cookie/workflow state.
+- [x] Add provider auth modes for cookie/CDP.
+- [x] Add cookie import API with encrypted storage.
+- [x] Add provider account select endpoint.
+- [x] Add provider account health endpoint.
+- [x] Add compact UI health action and API wrappers.
+- [x] Runtime smoke: providers, select, health, cx_agy chat.
+- [x] Replace hotpatch with durable Docker rebuild.
+- [x] Add workflow execution smoke.
+- [x] Add CDP/profile dry-run smoke guard.
+- [x] Add CDP/profile smoke with screenshot.
+- [x] Add social publish dry-run smoke.
+- [x] Add provider account config UI.
+- [x] Add cookie import UI.
+- [x] Add sticky-per-workflow account selection.
+- [x] Add guarded CDP recipe endpoint and UI action.
+- [x] Add durable artifact file storage.
+- [x] Add extension recipe import/dry-run UI.
+
+- [x] Add workflow dry-run executor.
+- [x] Connect generate_text to live 9router execution inside workflow.
+- [x] Replace smoke buttons with compact forms.
+- [ ] Add workflow detail drawer.
+- [ ] Add browser extension native bridge install/sync.
+- [x] Add retrying provider route endpoint.
+- [x] Add provider route UI smoke action.
+- [x] Add hard quota windows/accounting.
+- [x] Add native extension bridge server contract.
+- [x] Package local MV3 extension shell.
+- [x] Add extension bridge job queue.

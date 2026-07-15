@@ -33,3 +33,20 @@
 - 中国版 API Key 只能搭配 `aitoearn.cn` 相关 URL；国际版 API Key 只能搭配 `aitoearn.ai` 相关 URL。环境和 Key 不匹配会导致 401。
 - MCP 示例需要按环境区分 `https://aitoearn.cn/api/unified/mcp` / `https://aitoearn.ai/api/unified/mcp`，SSE 示例同理区分 `/api/unified/sse`。
 - Relay 示例需要按 `RELAY_API_KEY` 来源选择 `RELAY_SERVER_URL`：中国版使用 `https://aitoearn.cn/api`，国际版使用 `https://aitoearn.ai/api`。
+
+## SocialOps Local Runtime Rules
+
+- `https://socialops.bebio.site` must be served by `project/aitoearn-web` production runtime, not `next dev`.
+- Use `npm run live` in `project/aitoearn-web` for public tunnel work; it rebuilds cleanly, starts `next start -p 6061`, keeps Cloudflare tunnel live, and warms key routes.
+- Never run `next build` while `next dev/start -p 6061` is serving the public tunnel. Stop it first to avoid stale `.next` chunks and browser server errors.
+- After runtime/config changes, verify localhost and public URL for `/`, `/healthz`, `/en/accounts`, and `/api/v2/channels/accounts`.
+
+## Multi-Agent Coordination Rules
+
+- Before running, stopping, rebuilding, or restarting SocialOps, every agent must read `AGENT_COORDINATION.md`.
+- Runtime mutations require a claim in `AGENT_COORDINATION.md` with agent name, purpose, PID when available, start time, and touched surface.
+- Only one agent may own `.next`, port `6061`, or the Cloudflare tunnel at a time. Other agents may edit disjoint files but must not run `next dev`, `next build`, `next start`, or kill runtime processes.
+- Public port `6061` is production-only. Development servers must use another port and must never point the public tunnel at their `.next`.
+- Before claiming runtime, verify the recorded PID/process. A claim is stale only when its process is dead or the entry is older than 30 minutes with no update. Mark stale entries released; do not silently overwrite active ownership.
+- After runtime work, update the verification result and release the claim. Keep only active claims plus the latest 10 completed entries; prune older completed entries periodically.
+- Build from a clean `.next` only after the runtime owner has stopped port `6061`. Never build concurrently with another agent or watcher.

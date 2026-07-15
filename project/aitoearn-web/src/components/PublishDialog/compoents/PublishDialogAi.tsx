@@ -335,7 +335,7 @@ const PublishDialogAi = memo(
       // Chat model state (for shorten/expand/polish/translate/hashtags)
       const [selectedChatModel, setSelectedChatModel] = useState(() => {
         const savedModel = localStorage.getItem('ai_chat_model')
-        return savedModel || 'gpt-5.1-all'
+        return savedModel || 'cx_agy'
       })
 
       // Image generation model state
@@ -382,7 +382,7 @@ const PublishDialogAi = memo(
           const chatModelExists = chatModels.find((m: any) => m.name === selectedChatModel)
           if (!chatModelExists) {
             // Try to find default model
-            const defaultModel = chatModels.find((m: any) => m.name === 'gpt-5.1-all')
+            const defaultModel = chatModels.find((m: any) => m.name === 'cx_agy')
             if (defaultModel) {
               setSelectedChatModel(defaultModel.name)
               localStorage.setItem('ai_chat_model', defaultModel.name)
@@ -659,22 +659,38 @@ const PublishDialogAi = memo(
 
             // Check response status
             if (!response.ok) {
-              throw new Error(`HTTP error! status: ${response.status}`)
+              let detail = ''
+              try {
+                const errBody = await response.clone().json()
+                detail = errBody?.message ? ` — ${errBody.message}` : ''
+              }
+              catch { /* ignore */ }
+              throw new Error(
+                response.status === 404
+                  ? `AI chat 404${detail}. Local route /api/ai/chat missing — restart next start.`
+                  : `HTTP error! status: ${response.status}${detail}`,
+              )
             }
 
-            // Try to read JSON response
+            // Try to read JSON response (local /api/ai/chat or remote backend)
             const result = await response.json()
+            const contentText = String(
+              result?.data?.content
+              || result?.data?.text
+              || result?.content
+              || '',
+            ).trim()
 
-            if (result.code === 0 && result.data?.content) {
+            if (result.code === 0 && contentText) {
               // Optimize: convert base64 images to blob URLs to avoid storing large data causing input lag
-              let processedContent = result.data.content
+              let processedContent = contentText
 
               // Find all base64 images and convert to blob URLs
               const base64Regex = /!\[([^\]]*)\]\((data:image\/[^;]+;base64,[^)]+)\)/g
               let match
               const replacements: Array<{ original: string, blobUrl: string }> = []
 
-              while ((match = base64Regex.exec(result.data.content)) !== null) { // eslint-disable-line no-cond-assign
+              while ((match = base64Regex.exec(contentText)) !== null) { // eslint-disable-line no-cond-assign
                 const [fullMatch, alt, base64Url] = match
                 try {
                   // Extract base64 data
@@ -1285,21 +1301,22 @@ const PublishDialogAi = memo(
 
       return (
         <div
-          className="bg-background w-[380px] overflow-hidden rounded-lg flex flex-col z-10 mx-[15px] max-h-[calc(100vh-80px)]"
+          className="z-10 mx-3 flex max-h-[calc(100vh-80px)] w-[min(400px,calc(100vw-2rem))] min-w-0 max-w-[400px] shrink-0 flex-col overflow-hidden rounded-2xl border border-border/80 bg-background shadow-sm"
           id="publishDialogAi"
+          data-testid="publish-dialog-ai"
         >
-          <h1 className="text-base font-semibold text-left px-[15px] pt-[15px] pb-0 flex justify-between flex-shrink-0">
-            <span>{t('aiAssistant' as any)}</span>
-            <XCircle className="h-5 w-5 cursor-pointer" onClick={onClose} />
+          <h1 className="flex shrink-0 items-center justify-between gap-2 border-b border-border/50 px-4 pb-3 pt-3.5 text-left text-[15px] font-semibold tracking-tight">
+            <span className="min-w-0 truncate">{t('aiAssistant' as any)}</span>
+            <XCircle className="h-5 w-5 shrink-0 cursor-pointer text-muted-foreground hover:text-foreground" onClick={onClose} />
           </h1>
-          <div className="px-3 mt-3 flex flex-col flex-1 min-h-0">
+          <div className="mt-0 flex min-h-0 min-w-0 flex-1 flex-col px-3 pt-3">
             {/* Chat messages area */}
             <div
               ref={chatContainerRef}
-              className="flex-1 overflow-y-auto mb-3 p-3 bg-muted rounded-lg"
+              className="mb-3 min-h-[120px] min-w-0 flex-1 overflow-y-auto rounded-xl bg-muted/60 p-3"
             >
               {messages.length === 0 ? (
-                <div className="text-center text-muted-foreground py-10">
+                <div className="px-2 py-10 text-center text-[13px] leading-relaxed text-muted-foreground">
                   {t('aiFeatures.emptyChat' as any)}
                 </div>
               ) : (
@@ -1321,41 +1338,36 @@ const PublishDialogAi = memo(
               )}
             </div>
 
-            {/* Action buttons area */}
-            <div className="relative">
-              {/* Image upload area for imageToImage - positioned above buttons */}
+            {/* Action toolbar — fixed grid so icons don't crush the input */}
+            <div className="relative shrink-0">
               {activeAction === 'imageToImage' && (
-                <div className="absolute bottom-full left-[120px] right-0 mb-2.5 flex gap-2 flex-wrap">
-                  {/* Uploaded image preview */}
+                <div className="mb-2 flex flex-wrap gap-2">
                   {uploadedImage && (
-                    <div className="relative inline-block rounded-lg overflow-hidden">
+                    <div className="relative inline-block overflow-hidden rounded-lg">
                       <img
                         src={uploadedImage.preview}
                         alt="Uploaded"
                         className={cn(
-                          'w-[120px] h-[80px] rounded-lg block object-cover',
+                          'block h-[72px] w-[108px] rounded-lg object-cover',
                           uploadedImage.uploading && 'opacity-50',
                         )}
                       />
                       {uploadedImage.uploading && (
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+                        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
                           <Loader2 className="h-5 w-5 animate-spin" />
                         </div>
                       )}
-                      {/* Close button */}
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => setUploadedImage(null)}
                         disabled={uploadedImage.uploading}
-                        className="absolute top-1 right-1 p-0 w-5 h-5 min-w-0 bg-black/50 text-white hover:bg-black/70 cursor-pointer"
+                        className="absolute right-1 top-1 h-5 w-5 min-w-0 bg-black/50 p-0 text-white hover:bg-black/70 cursor-pointer"
                       >
                         <XCircle className="h-3 w-3" />
                       </Button>
                     </div>
                   )}
-
-                  {/* Upload box - show when no image */}
                   {!uploadedImage && (
                     <>
                       <input
@@ -1363,17 +1375,16 @@ const PublishDialogAi = memo(
                         accept="image/*"
                         onChange={(e) => {
                           const file = e.target.files?.[0]
-                          if (file) {
+                          if (file)
                             handleImageUpload(file)
-                          }
                         }}
                         className="hidden"
                         id="imageToImageUpload"
                       />
                       <label htmlFor="imageToImageUpload" className="m-0 cursor-pointer">
-                        <div className="w-[120px] h-[80px] border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center bg-muted/50 transition-colors hover:border-primary hover:text-primary text-muted-foreground">
-                          <Image className="h-6 w-6 mb-1" />
-                          <span className="text-xs">{t('aiFeatures.uploadImage' as any)}</span>
+                        <div className="flex h-[72px] w-[108px] flex-col items-center justify-center rounded-lg border-2 border-dashed border-border bg-muted/50 text-muted-foreground transition-colors hover:border-primary hover:text-primary">
+                          <Image className="mb-1 h-5 w-5" />
+                          <span className="text-[10px]">{t('aiFeatures.uploadImage' as any)}</span>
                         </div>
                       </label>
                     </>
@@ -1381,17 +1392,17 @@ const PublishDialogAi = memo(
                 </div>
               )}
 
-              <div className="flex gap-2 mb-2 p-2 bg-muted/50 rounded-lg justify-between items-center">
+              <div className="mb-2 flex items-center gap-1.5 rounded-xl border border-border/60 bg-muted/40 p-1.5">
                 <TooltipProvider>
-                  <div className="flex gap-2 flex-1 flex-wrap">
+                  <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-x-auto">
                     {actionButtons.map(({ action, icon, label }) => (
                       <Tooltip key={action}>
                         <TooltipTrigger asChild>
                           <Button
-                            variant={activeAction === action ? 'default' : 'outline'}
-                            size="sm"
+                            variant={activeAction === action ? 'default' : 'ghost'}
+                            size="icon"
                             onClick={() => handleActionClick(action as AIAction)}
-                            className="cursor-pointer"
+                            className="h-8 w-8 shrink-0 cursor-pointer"
                           >
                             {icon}
                           </Button>
@@ -1405,10 +1416,10 @@ const PublishDialogAi = memo(
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
-                        variant="outline"
-                        size="sm"
+                        variant="ghost"
+                        size="icon"
                         onClick={() => setSettingsVisible(true)}
-                        className="cursor-pointer"
+                        className="h-8 w-8 shrink-0 cursor-pointer"
                       >
                         <Settings className="h-4 w-4" />
                       </Button>
@@ -1421,8 +1432,8 @@ const PublishDialogAi = memo(
               </div>
             </div>
 
-            {/* Input area */}
-            <div className="flex gap-2 mb-3">
+            {/* Input — full width row under actions, never crushed by icon strip */}
+            <div className="mb-3 flex min-w-0 shrink-0 items-end gap-2" data-testid="publish-ai-input-row">
               <Textarea
                 value={inputValue}
                 onChange={e => setInputValue(e.target.value)}
@@ -1431,7 +1442,7 @@ const PublishDialogAi = memo(
                     ? t('aiFeatures.inputPrompt' as any)
                     : t('aiFeatures.emptyChat' as any)
                 }
-                rows={1}
+                rows={2}
                 disabled={isProcessing}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
@@ -1439,19 +1450,17 @@ const PublishDialogAi = memo(
                     sendMessage()
                   }
                 }}
-                className="flex-1 min-h-[36px] resize-none"
+                className="box-border min-h-[48px] max-h-[120px] min-w-0 flex-1 resize-none rounded-xl border-border/70 text-[13px] leading-snug"
               />
               <Button
                 onClick={() => sendMessage()}
                 disabled={isProcessing}
-                className="cursor-pointer"
+                size="icon"
+                className="h-12 w-12 shrink-0 cursor-pointer rounded-xl"
               >
-                {isProcessing ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                ) : (
-                  <Send className="h-4 w-4 mr-1" />
-                )}
-                {t('aiFeatures.send' as any)}
+                {isProcessing
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Send className="h-4 w-4" />}
               </Button>
             </div>
           </div>

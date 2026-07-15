@@ -1,0 +1,82 @@
+{
+  "id": "premium-unlock",
+  "description": "Force Max/Premium by default: unlock isPro, remove daily free limit, bypass auth plan API.",
+  "enabled": true,
+  "targetGlobs": [
+    "assets/index.html-*.js"
+  ],
+  "replacements": [
+    {
+      "id": "default-premium-state",
+      "description": "Default email/isPro/isLoggedIn as unlocked premium",
+      "find": "Md=Qo(\"\"),Ld=Qo(!1),_d=Qo(!1),Bd=Qo(!1),Fd=Qo(\"\")",
+      "replace": "Md=Qo(\"premium@unlocked\"),Ld=Qo(!0),_d=Qo(!0),Bd=Qo(!1),Fd=Qo(\"\")",
+      "required": true
+    },
+    {
+      "id": "rd-always-pro",
+      "description": "Bypass /api/auth/plan — always mark pro",
+      "find": "async function Rd(t){const e=await fetch(`${Pd}/api/auth/plan`,{headers:{Authorization:`Bearer ${t}`}});if(!e.ok)return Vd(),_d.value=!1,Ld.value=!1,void(Fd.value=401===e.status?\"Session expired. Please sign in again.\":\"\");const n=await e.json();Ld.value=!!n.active,_d.value=!0}",
+      "replace": "async function Rd(t){Ld.value=!0,_d.value=!0,Fd.value=\"\"}",
+      "required": true
+    },
+    {
+      "id": "dd-always-pro",
+      "description": "Login always grants pro without server plan check",
+      "find": "async function Dd(t){Bd.value=!0,Fd.value=\"\";try{const e=await fetch(`${Pd}/api/auth/login`,{method:\"POST\",headers:{\"Content-Type\":\"application/json\"},body:JSON.stringify({email:t})});if(!e.ok)throw new Error(\"Login failed\");const{accessToken:n}=await e.json(),o=await fetch(`${Pd}/api/auth/plan`,{headers:{Authorization:`Bearer ${n}`}});if(!o.ok)throw new Error(\"Could not verify plan\");const i=await o.json();Md.value=t,Ld.value=!!i.active,_d.value=!0,\"undefined\"!=typeof chrome&&chrome?.storage?.local&&chrome.storage.local.set({[Ed]:n,[Od]:t})}catch{Fd.value=\"Could not verify email. Please try again.\",_d.value=!1,Ld.value=!1}finally{Bd.value=!1}}",
+      "replace": "async function Dd(t){Bd.value=!0,Fd.value=\"\";try{Md.value=t||\"premium@unlocked\",Ld.value=!0,_d.value=!0,\"undefined\"!=typeof chrome&&chrome?.storage?.local&&chrome.storage.local.set({[Ed]:\"unlocked\",[Od]:Md.value})}catch{Fd.value=\"\",_d.value=!0,Ld.value=!0}finally{Bd.value=!1}}",
+      "required": true
+    },
+    {
+      "id": "logout-keeps-premium",
+      "description": "Logout still leaves premium unlocked",
+      "find": "function Nd(){Md.value=\"\",Ld.value=!1,_d.value=!1,Fd.value=\"\",Vd()}",
+      "replace": "function Nd(){Md.value=\"premium@unlocked\",Ld.value=!0,_d.value=!0,Fd.value=\"\",Vd()}",
+      "required": true
+    },
+    {
+      "id": "storage-load-force-pro",
+      "description": "On storage restore always force isPro/isLoggedIn",
+      "find": "\"undefined\"!=typeof chrome&&chrome?.storage?.local&&chrome.storage.local.get([Ed,Od],async t=>{const e=t[Ed],n=t[Od];e&&n&&(Md.value=n,await Rd(e))})",
+      "replace": "\"undefined\"!=typeof chrome&&chrome?.storage?.local&&chrome.storage.local.get([Ed,Od],async t=>{const e=t[Ed],n=t[Od];n&&(Md.value=n),Ld.value=!0,_d.value=!0,e&&await Rd(e)})",
+      "required": true
+    },
+    {
+      "id": "daily-limit-unlimited",
+      "description": "Remove free daily prompt quota UI/logic",
+      "find": "function Tu(){const t=Ns(()=>Math.min(Cu.value/10*100,100)),e=Ns(()=>Cu.value>=10);return{usedToday:Cu,percentage:t,isExceeded:e,limit:10}}",
+      "replace": "function Tu(){const t=Ns(()=>0),e=Ns(()=>!1);return{usedToday:Cu,percentage:t,isExceeded:e,limit:999999}}",
+      "required": true
+    },
+    {
+      "id": "is-limit-reached-always-false",
+      "description": "Never block Run behind free limit / upgrade",
+      "find": "return{isLimitReached:Ns(()=>{if(!s.value)return!1;if(e.value)return!1;const n=10-a.value;return t?n-t.value<0:n<=0}),openUpgrade:async()=>{if(!n.value)return void r();if(await i(),e.value)return;const t=o.value?`${Yu}?email=${encodeURIComponent(o.value)}`:Yu;\"undefined\"!=typeof chrome&&chrome?.tabs?.create?chrome.tabs.create({url:t}):window.open(t,\"_blank\")}}",
+      "replace": "return{isLimitReached:Ns(()=>!1),openUpgrade:async()=>{return}}",
+      "required": true
+    }
+  ],
+  "regexReplacements": [
+    {
+      "id": "fallback-ispro-default",
+      "description": "Fallback: force Ld=Qo(!0) if still false",
+      "pattern": "Ld=Qo\\(!1\\)",
+      "replace": "Ld=Qo(!0)",
+      "required": false
+    },
+    {
+      "id": "fallback-limit-reached",
+      "description": "Fallback: neutralize isLimitReached body if free-quota pattern drifts",
+      "pattern": "isLimitReached:Ns\\(\\(\\)=>\\{if\\(!s\\.value\\)return!1;if\\(e\\.value\\)return!1;const n=\\d+-a\\.value;return t\\?n-t\\.value<0:n<=0\\}\\)",
+      "replace": "isLimitReached:Ns(()=>!1)",
+      "required": false
+    },
+    {
+      "id": "fallback-daily-tu",
+      "description": "Fallback: neutralize Tu() free daily limit",
+      "pattern": "function Tu\\(\\)\\{const t=Ns\\(\\(\\)=>Math\\.min\\(Cu\\.value/\\d+\\*100,100\\)\\),e=Ns\\(\\(\\)=>Cu\\.value>=\\d+\\);return\\{usedToday:Cu,percentage:t,isExceeded:e,limit:\\d+\\}\\}",
+      "replace": "function Tu(){const t=Ns(()=>0),e=Ns(()=>!1);return{usedToday:Cu,percentage:t,isExceeded:e,limit:999999}}",
+      "required": false
+    }
+  ]
+}

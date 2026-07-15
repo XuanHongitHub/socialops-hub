@@ -21,9 +21,16 @@ export function MobileTopBar({ onOpen }: MobileTopBarProps) {
 
   return (
     <div className="md:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between h-14 px-4 bg-background border-b border-border" data-testid="mobile-topbar">
-      <Link href="/" className="flex items-center gap-2" data-testid="mobile-topbar-logo">
-        <Image src={logo} alt="Aitoearn" width={32} height={32} />
-        <span className="text-base font-semibold text-foreground">Aitoearn</span>
+      <Link href="/" className="flex items-center gap-2.5" data-testid="mobile-topbar-logo">
+        <Image
+          src={logo}
+          alt="Socials Hub"
+          width={40}
+          height={40}
+          className="h-10 w-10 rounded-xl object-cover shadow-sm ring-1 ring-border/60"
+          priority
+        />
+        <span className="text-base font-semibold text-foreground">Socials Hub</span>
       </Link>
 
       <div className="flex items-center gap-2">
@@ -53,3 +60,4 @@ export function MobileTopBar({ onOpen }: MobileTopBarProps) {
     </div>
   )
 }
+

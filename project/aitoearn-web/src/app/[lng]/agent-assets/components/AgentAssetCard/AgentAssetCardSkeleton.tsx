@@ -6,13 +6,14 @@
 
 import { Skeleton } from '@/components/ui/skeleton'
 
-export function AgentAssetCardSkeleton() {
-  // 随机高度，模拟瀑布流效果
-  const randomHeight = Math.floor(Math.random() * 100) + 150
+const SKELETON_HEIGHTS = [176, 208, 160, 224, 192]
+
+export function AgentAssetCardSkeleton({ index = 0 }: { index?: number }) {
+  const height = SKELETON_HEIGHTS[index % SKELETON_HEIGHTS.length]
 
   return (
     <div className="rounded-lg overflow-hidden">
-      <Skeleton className="w-full" style={{ height: `${randomHeight}px` }} />
+      <Skeleton className="w-full" style={{ height: `${height}px` }} />
     </div>
   )
 }

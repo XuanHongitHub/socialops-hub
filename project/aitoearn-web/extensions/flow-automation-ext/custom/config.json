@@ -1,0 +1,23 @@
+{
+  "extensionId": "fnmijgmnjpealnnadjpjilaanhhambeb",
+  "preferredProfiles": ["Profile 6"],
+  "chromeUserDataCandidates": [
+    "%LOCALAPPDATA%\\Google\\Chrome\\User Data",
+    "%LOCALAPPDATA%\\Google\\Chrome Beta\\User Data",
+    "%LOCALAPPDATA%\\Chromium\\User Data"
+  ],
+  "preservePaths": [
+    "custom",
+    "update.ps1",
+    "update.cmd",
+    ".git",
+    ".gitignore"
+  ],
+  "skipNamePrefixes": ["_"],
+  "autoUpdate": {
+    "enabled": true,
+    "intervalMinutes": 60,
+    "reapplyPatchesIfSameVersion": false
+  },
+  "notes": "Edit patches in custom/patches and optional file overlays in custom/overlays. Run update.ps1 after editing. Do not use folder names starting with '_' — Chrome reserves them."
+}

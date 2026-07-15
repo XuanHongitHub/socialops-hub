@@ -79,6 +79,8 @@ export function useChatState(options: IChatStateOptions): IChatStateReturn {
   // Refs
   const hasLoadedRef = useRef(false)
   const rawMessagesRef = useRef<TaskMessage[]>([])
+  const wasGeneratingRef = useRef(false)
+  const syncInFlightRef = useRef(false)
 
   // 当 taskId 变化时，重置与任务相关的本地状态，确保不会错误地使用上一次任务的缓存
   useEffect(() => {
@@ -154,11 +156,10 @@ export function useChatState(options: IChatStateOptions): IChatStateReturn {
       return
     }
 
-    // 如果 Store 中已有该任务的消息，优先使用（支持任务缓存）
+    // Cache may be incomplete after SSE. Render it immediately, but always
+    // refresh the canonical task once per page/task load.
     if (storeMessages.length > 0) {
       setIsLoading(false)
-      hasLoadedRef.current = true
-      return
     }
 
     const loadTask = async () => {
@@ -219,6 +220,42 @@ export function useChatState(options: IChatStateOptions): IChatStateReturn {
     return storeMessages.length > 0 || isActiveTask ? storeMessages : localMessages
   })()
   const isGenerating = isRealtimeGenerating || localIsGenerating || isPolling
+
+  // SSE may omit final assistant messages from the local store. Re-read the
+  // canonical task once generation ends so every continuation is rendered.
+  useEffect(() => {
+    if (isRealtimeGenerating) {
+      wasGeneratingRef.current = true
+      return
+    }
+    if (!isActiveTask || !wasGeneratingRef.current || syncInFlightRef.current)
+      return
+
+    wasGeneratingRef.current = false
+    syncInFlightRef.current = true
+    let cancelled = false
+    const syncCanonicalMessages = async () => {
+      try {
+        const result = await agentApi.getTaskDetail(taskId)
+        if (!cancelled && result?.code === 0 && result.data) {
+          const messages = result.data.messages || []
+          rawMessagesRef.current = messages
+          setTask(result.data)
+          const converted = convertMessages(messages)
+          setLocalMessages(converted)
+          setMessages(converted, taskId)
+        }
+      }
+      catch (error) {
+        console.warn('[ChatState] Canonical message sync failed:', error)
+      }
+      finally {
+        syncInFlightRef.current = false
+      }
+    }
+    void syncCanonicalMessages()
+    return () => { cancelled = true }
+  }, [isActiveTask, isRealtimeGenerating, setMessages, taskId])
   // taskId='new' 时，工作流步骤存储在 currentTaskId（临时任务）中
   const workflowSteps: IWorkflowStep[] = (() => {
     if (taskId === 'new') {

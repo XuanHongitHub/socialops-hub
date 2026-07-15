@@ -17,6 +17,18 @@ import http from '@/utils/request'
 export type DraftTaskStatus = 'generating' | 'success' | 'failed'
 
 /** 生成任务 response 数据 */
+export interface DraftGenerationProgress {
+  /** 0–100 when provider reports numeric progress */
+  percent?: number
+  /** Provider raw status e.g. pending | processing | done */
+  providerStatus?: string
+  /** Human-readable stage for queue UI */
+  stage?: string
+  /** ISO timestamp of last progress sample */
+  updatedAt?: string
+  requestId?: string
+}
+
 export interface DraftGenerationResponse {
   materialId?: string
   mediaId?: string
@@ -31,6 +43,8 @@ export interface DraftGenerationResponse {
   generatedImageCount?: number
   imageGenerationErrors?: Array<Record<string, unknown>>
   plan?: Record<string, unknown>
+  /** Live Grok/provider job progress for queue cards */
+  progress?: DraftGenerationProgress
 }
 
 /** 生成任务请求参数 */
@@ -49,6 +63,13 @@ export interface DraftGenerationRequest {
   imageSize?: string
   platforms?: PlatType[]
   draftType?: VideoDraftType | ImageTextDraftType
+  /** storyboard = 3-shot I2V + stitch; omit for single-clip video */
+  mode?: 'storyboard' | string
+  forceAspect?: boolean
+  productTitle?: string
+  productUrl?: string
+  productImageUrl?: string
+  productNotes?: string
 }
 
 /** 生成任务详情 */
@@ -111,8 +132,16 @@ export function apiCreateDraftGeneration(data: {
   duration?: number
   resolution?: string
   aspectRatio?: string
+  /** true = honor aspectRatio with letterbox pad (e.g. 9:16 Reels); false/default = match product photo */
+  forceAspect?: boolean
   platforms?: PlatType[]
   draftType?: VideoDraftType
+  /** storyboard = multi-shot product board (S01–S03) + stitch */
+  mode?: 'storyboard' | string
+  productTitle?: string
+  productUrl?: string
+  productImageUrl?: string
+  productNotes?: string
 }) {
   return http.post<CreateDraftGenerationVo>('ai/draft-generation/v2', data)
 }
@@ -156,6 +185,11 @@ export function apiGetDraftGenerationStats() {
  */
 export function apiQueryDraftGenerationTasks(taskIds: string[]) {
   return http.post<DraftGenerationTask[]>('ai/draft-generation/query', { taskIds }, true)
+}
+
+/** Cancel a stuck/generating draft task (local SocialOps) */
+export function apiCancelDraftGenerationTask(taskId: string) {
+  return http.post<DraftGenerationTask>('ai/draft-generation/cancel', { taskId }, true)
 }
 
 /**

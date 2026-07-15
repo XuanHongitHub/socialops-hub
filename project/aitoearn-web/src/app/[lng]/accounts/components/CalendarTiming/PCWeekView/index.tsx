@@ -28,6 +28,7 @@ import { cn } from '@/lib/utils'
 import { useSystemStore } from '@/store/system'
 import CalendarRecord from '../../CalendarTimingItem/components/CalendarRecord'
 import { CustomDragLayer } from '../../CalendarTimingItem/components/CustomDragLayer'
+import { getDays } from '../calendarTiming.utils'
 import {
   filterCalendarFestivalEvents,
   getChinaCalendarEvents,
@@ -45,9 +46,9 @@ import 'dayjs/locale/ko'
 // 时间槽：每 2 小时（12 AM, 2 AM, 4 AM, ..., 10 PM）
 const TIME_SLOTS = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22]
 const HOURS_PER_TIME_SLOT = 2
-const VISIBLE_HOURS_PER_SCREEN = 12
+const VISIBLE_HOURS_PER_SCREEN = 16
 const VISIBLE_TIME_SLOT_COUNT = VISIBLE_HOURS_PER_SCREEN / HOURS_PER_TIME_SLOT
-const DEFAULT_TIME_CELL_HEIGHT = 120
+const DEFAULT_TIME_CELL_HEIGHT = 88
 
 /**
  * 格式化小时为 24 小时制
@@ -60,7 +61,7 @@ function formatHour(hour: number): string {
  * 获取发布时间对应的时间槽（每 2 小时一个槽）
  */
 function getTimeSlot(publishTime: string | Date): number {
-  const hour = dayjs(publishTime).hour()
+  const hour = getDays(publishTime).hour()
   return Math.floor(hour / 2) * 2
 }
 
@@ -144,7 +145,7 @@ const TimeCell = memo<ITimeCellProps>(
           }
         }}
         className={cn(
-          'group relative flex-1 min-w-0 overflow-visible border-r border-b last:border-r-0 p-2',
+          'group relative flex-1 min-w-0 overflow-visible border-r border-b last:border-r-0 p-1.5',
           'transition-colors',
           isPast && 'bg-muted/30',
           isOver && !isPast && 'bg-accent/50',
@@ -173,7 +174,7 @@ const TimeCell = memo<ITimeCellProps>(
               </Button>
             )}
             {/* 任务列表 */}
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               {displayRecords.map(record => (
                 <div key={record.id + record.title + record.uid + record.updatedAt}>
                   <CustomDragLayer publishRecord={record} snapToGrid={false} />
@@ -342,7 +343,7 @@ const PCWeekView = memo<IPCWeekViewProps>(({ currentDate, recordMap, loading, on
                 <div
                   key={dateStr}
                   className={cn(
-                    'flex-1 min-w-0 border-r border-b last:border-r-0 px-2 py-3 transition-colors',
+                    'flex-1 min-w-0 border-r border-b last:border-r-0 px-2 py-2 transition-colors',
                     isToday && 'bg-gradient-to-b from-primary/10 to-transparent',
                   )}
                 >

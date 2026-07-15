@@ -81,10 +81,11 @@ const LoginDialogContent = memo(() => {
         <div className="flex flex-col items-center pb-2 pt-2">
           <Image
             src={logo}
-            alt="AiToEarn"
-            width={56}
-            height={56}
-            className="mb-4 drop-shadow-md"
+            alt="Socials Hub"
+            width={80}
+            height={80}
+            className="mb-4 h-20 w-20 rounded-2xl object-cover shadow-md ring-1 ring-border/50 drop-shadow-md"
+            priority
           />
           <p className="text-sm text-muted-foreground">{t('loginSubtitle')}</p>
         </div>
@@ -124,3 +125,4 @@ const LoginDialogContent = memo(() => {
 })
 
 LoginDialogContent.displayName = 'LoginDialogContent'
+

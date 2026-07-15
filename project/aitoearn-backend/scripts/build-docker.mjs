@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { execSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { arch } from 'node:os'
 import { Command } from 'commander'
 import { $, chalk, fs, path } from 'zx'
@@ -124,6 +126,22 @@ async function copyArtifacts(projects, graph, contextDir, appName, verbose = fal
     if (verbose)
       console.info(chalk.gray(`  ${src} -> ${dest}`))
   }
+
+  // Nx tsc target may emit package/assets only in this workspace; force JS into Docker context.
+  try {
+    execSync(`npx tsc -p apps/${appName}/tsconfig.app.json --outDir "${contextDir}" --noEmit false --declaration false --sourceMap false --incremental false`, {
+      stdio: verbose ? 'inherit' : 'pipe',
+      shell: true,
+    })
+    if (verbose)
+      console.info(chalk.green(`${appName} JavaScript emitted into Docker context`))
+  }
+  catch (error) {
+    console.error(chalk.red(`${appName} TypeScript emit failed:`))
+    console.error(chalk.red(`  ${error.message}`))
+    throw new Error(`项目 ${appName} JS 产物缺失，脚本终止执行`)
+  }
+
 }
 
 async function copyDockerfile(projectName, contextDir, verbose = false) {
@@ -238,8 +256,7 @@ async function buildImage(projectName, contextDir, options = {}) {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
 
   // 获取 Git 短提交哈希
-  const gitHash = await $`git rev-parse --short HEAD`
-  const shortHash = gitHash.stdout.trim()
+  const shortHash = execSync('git rev-parse --short HEAD', { encoding: 'utf8', shell: true }).trim()
 
   // 生成与 GitHub Actions 一致的标签格式
   const tag = `${date}-${shortHash}`
@@ -253,7 +270,20 @@ async function buildImage(projectName, contextDir, options = {}) {
 
   try {
     // 构建镜像并打所有 tag
-    await $({ cwd: contextDir })`docker buildx build --build-arg APP_NAME=${projectName} --platform ${platformStr} -t ${localImageName} ${tagArgs} ${pushArgs} .`
+    const dockerArgs = [
+      'buildx', 'build',
+      '--build-arg', `APP_NAME=${projectName}`,
+      '--platform', platformStr,
+      '-t', localImageName,
+      ...tagArgs,
+      ...pushArgs,
+      '.',
+    ]
+    execSync(`docker ${dockerArgs.map(arg => `"${String(arg).replace(/"/g, '\"')}"`).join(' ')}`, {
+      cwd: contextDir,
+      stdio: 'inherit',
+      shell: true,
+    })
     console.info(chalk.green(`Docker 镜像构建完成:`))
     if (!push) {
       console.info(chalk.gray(`  本地: ${localImageName}`))
@@ -387,7 +417,7 @@ async function generateConfig(projects, graph, contextDir, verbose = false) {
     console.info(chalk.green('Monorepo 配置生成完成'))
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const program = new Command()
 
   program

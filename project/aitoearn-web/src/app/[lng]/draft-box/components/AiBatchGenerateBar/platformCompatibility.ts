@@ -95,8 +95,13 @@ const PLATFORM_CONSTRAINTS: Partial<Record<PlatType, PlatformConstraint>> = {
   youtube: {
     videoCategories: [
       {
-        name: 'default',
-        aspectRatioRange: null,
+        name: 'shorts',
+        aspectRatioRange: [0.55, 0.62], // ~9:16
+        durationRange: [1, 180],
+      },
+      {
+        name: 'standard',
+        aspectRatioRange: [1.7, 1.85], // ~16:9
         durationRange: [1, 43200], // ≤12h
       },
     ],
@@ -124,16 +129,47 @@ const PLATFORM_CONSTRAINTS: Partial<Record<PlatType, PlatformConstraint>> = {
   },
 }
 
-/** 将比例标签转为数值："9:16" → 0.5625 */
-function aspectRatioLabelToNumeric(label: string): number | null {
-  const parts = label.split(':')
-  if (parts.length !== 2)
-    return null
-  const w = Number(parts[0])
-  const h = Number(parts[1])
-  if (!w || !h)
-    return null
-  return w / h
+import {
+  aspectRatioLabelToNumeric,
+  resolvePublishReadyGenParams as resolvePublishReadyGenParamsPure,
+} from '@/lib/socialOps/publishReadyParams'
+
+export { aspectRatioLabelToNumeric }
+
+/**
+ * Pick aspect + duration that will pass publish validation for ALL selected platforms.
+ * Prefer 9:16 for vertical social (IG Reels 4:5–9:16, TikTok/FB reels). Avoid 1:1 when IG selected.
+ */
+export function resolvePublishReadyGenParams(input: {
+  platforms: PlatType[]
+  preferredAspect?: string
+  preferredDuration?: number
+  modelRatios?: string[]
+  modelDurationMin?: number
+  modelDurationMax?: number
+  /** Force 9:16 Reels pad path; default false = keep preferred / source aspect */
+  forceSocialPortrait?: boolean
+  /** When true (default), auto-correct aspect so platforms like IG Reels pass */
+  fitPlatforms?: boolean
+}): { aspectRatio: string, duration: number, topicMax: number, notes: string[], aspectCorrected: boolean } {
+  const platforms = input.platforms.filter(p => AccountPlatInfoMap.has(p))
+  const topicMaxByPlatform: Record<string, number> = {}
+  for (const plat of platforms) {
+    const info = AccountPlatInfoMap.get(plat)
+    if (info?.commonPubParamsConfig?.topicMax != null)
+      topicMaxByPlatform[String(plat).toLowerCase()] = info.commonPubParamsConfig.topicMax
+  }
+  return resolvePublishReadyGenParamsPure({
+    platforms: platforms.map(p => String(p)),
+    preferredAspect: input.preferredAspect,
+    preferredDuration: input.preferredDuration,
+    modelRatios: input.modelRatios,
+    modelDurationMin: input.modelDurationMin,
+    modelDurationMax: input.modelDurationMax,
+    topicMaxByPlatform,
+    forceSocialPortrait: input.forceSocialPortrait,
+    fitPlatforms: input.fitPlatforms,
+  })
 }
 
 /** 将秒数格式化为可读时长：3 → "3s"，90 → "1min30s"，14400 → "4h" */

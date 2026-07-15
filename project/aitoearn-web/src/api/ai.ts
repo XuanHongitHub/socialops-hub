@@ -50,9 +50,9 @@ export function getImageEditModels() {
   return http.get('ai/models/image/edit')
 }
 
-// 获取视频生成模型参数
+// 获取视频生成模型参数 (silent — local SocialOps may stub; avoid 404 toast spam)
 export function getVideoGenerationModels() {
-  return http.get('ai/models/video/generation')
+  return http.get('ai/models/video/generation', undefined, true)
 }
 
 // 视频生成
@@ -142,7 +142,8 @@ export async function aiChatStream(data: {
   const token = useUserStore.getState().token
   const lang = useUserStore.getState().lang
 
-  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/ai/chat`, {
+  const apiBase = (process.env.NEXT_PUBLIC_API_URL || '/api').replace(/\/$/, '')
+  const response = await fetch(`${apiBase}/ai/chat`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -151,7 +152,7 @@ export async function aiChatStream(data: {
     },
     body: JSON.stringify({
       stream: false, // 使用非流式响应
-      model: 'gpt-5.1-all',
+      model: data.model || 'cx_agy',
       temperature: 1,
       presence_penalty: 0,
       frequency_penalty: 0,
@@ -162,7 +163,17 @@ export async function aiChatStream(data: {
   })
 
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+    let detail = ''
+    try {
+      const errBody = await response.clone().json()
+      detail = errBody?.message ? `: ${errBody.message}` : ''
+    }
+    catch { /* ignore */ }
+    throw new Error(
+      response.status === 404
+        ? `AI chat unavailable (404)${detail}. Restart SocialOps live server after update.`
+        : `HTTP error! status: ${response.status}${detail}`,
+    )
   }
 
   return response

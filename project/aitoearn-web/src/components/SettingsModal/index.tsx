@@ -141,21 +141,27 @@ export function SettingsModal({ open, onClose, defaultTab }: SettingsModalProps)
   return (
     <Dialog open={open} onOpenChange={isOpen => !isOpen && onClose()}>
       <DialogContent
-        className="w-[95vw] max-w-[900px] gap-0 overflow-hidden p-0 sm:p-0 md:w-[900px]"
+        className="w-[95vw] max-w-[980px] gap-0 overflow-hidden p-0 sm:p-0 md:w-[980px]"
         aria-describedby={undefined}
       >
         <DialogTitle className="sr-only">{t('title')}</DialogTitle>
 
         {/* 移动端布局：垂直排列；桌面端：水平排列 */}
-        <div className="flex h-[85vh] max-h-[650px] flex-col overflow-hidden md:h-[70vh] md:max-h-none md:flex-row">
+        <div className="compact-ui flex h-[85vh] max-h-[650px] flex-col overflow-hidden md:h-[70vh] md:max-h-none md:flex-row">
           {/* 侧边栏/顶部导航 */}
           <div className="flex w-full shrink-0 overflow-hidden flex-col border-b border-border md:w-52 md:border-b-0 md:border-r">
             {/* 侧边栏头部 - Logo + 项目名称 */}
             <div className="flex h-14 shrink-0 items-center gap-2 px-4 md:h-auto md:px-5 md:py-4">
-              <Image src={logo} alt="Aitoearn" width={24} height={24} className="hidden md:block md:h-7 md:w-7" />
+              <Image
+                src={logo}
+                alt="Socials Hub"
+                width={36}
+                height={36}
+                className="hidden rounded-lg object-cover shadow-sm ring-1 ring-border/50 md:block md:h-9 md:w-9"
+              />
               <span className="text-sm font-semibold tracking-tight text-foreground md:text-base">
                 <span className="md:hidden">{t('title')}</span>
-                <span className="hidden md:inline">Aitoearn</span>
+                <span className="hidden md:inline">Socials Hub</span>
               </span>
             </div>
 

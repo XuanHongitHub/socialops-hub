@@ -75,6 +75,11 @@ export const usePublishDialogStorageStore = createPersistStore(
 
       // 恢复发布记录
       restorePubData() {
+        if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('platform')) {
+          set({ pubListChoosed: undefined, expandedPubItem: undefined, pubList: undefined })
+          return
+        }
+
         let { pubListChoosed, expandedPubItem, pubList } = _get()
 
         if (pubListChoosed === undefined || pubListChoosed.length === 0) {

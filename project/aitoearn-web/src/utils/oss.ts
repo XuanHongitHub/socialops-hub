@@ -9,10 +9,16 @@ export function getOssUrl(path?: string) {
     || path.startsWith('/ossProxy/')
     || path.startsWith('blob:http')
     || path.startsWith('blob:https')
+    // Local SocialOps assets (user upload + AI archive) are same-origin absolute paths
+    || path.startsWith('/api/')
   ) {
     return path
   }
-  return `${process.env.NEXT_PUBLIC_OSS_URL}${path}`
+  const base = process.env.NEXT_PUBLIC_OSS_URL ?? ''
+  const normalizedPath = base.includes('socialops.bebio.site') && path.startsWith('/') && !path.startsWith('/aitoearn/')
+    ? `/aitoearn${path}`
+    : path
+  return `${base}${normalizedPath}`
 }
 
 // 将完整的oss url转为代理的 oss url

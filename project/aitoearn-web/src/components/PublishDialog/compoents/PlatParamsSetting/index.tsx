@@ -41,11 +41,12 @@ const PlatParamsSetting = memo(
       { pubItem, style, onImageToImage, isMobile }: IPlatParamsSettingProps,
       ref: ForwardedRef<IPlatParamsSettingRef>,
     ) => {
-      const { expandedPubItem, step, setExpandedPubItem } = usePublishDialog(
+      const { expandedPubItem, step, setExpandedPubItem, pubListChoosed } = usePublishDialog(
         useShallow(state => ({
           expandedPubItem: state.expandedPubItem,
           step: state.step,
           setExpandedPubItem: state.setExpandedPubItem,
+          pubListChoosed: state.pubListChoosed,
         })),
       )
       const { t } = useTransClient('publish')
@@ -53,6 +54,8 @@ const PlatParamsSetting = memo(
       const platConfig = useMemo(() => {
         return AccountPlatInfoMap.get(pubItem.account.type)!
       }, [pubItem])
+
+      const multiSelected = (pubListChoosed?.length ?? 0) >= 2
 
       const PlatItemComp = useMemo(() => {
         switch (pubItem.account.type) {
@@ -135,12 +138,13 @@ const PlatParamsSetting = memo(
         }
       }, [pubItem, onImageToImage, isMobile])
 
-      // true=展开当前账号的参数设置 false=不展开
+      // Single account: always expand. Multi: accordion (click row to open that channel).
+      // Previously multi only expanded on step 1 — felt like you must disable channels to see config.
       const isExpand = useMemo(() => {
-        if (step === 0)
+        if (!multiSelected)
           return true
         return expandedPubItem?.account.id === pubItem.account.id
-      }, [expandedPubItem, pubItem, step])
+      }, [expandedPubItem, pubItem, multiSelected])
 
       // 检查描述是否超过最大长度
       const isTextOverflow = platConfig.commonPubParamsConfig.desMax < pubItem.params.des.length

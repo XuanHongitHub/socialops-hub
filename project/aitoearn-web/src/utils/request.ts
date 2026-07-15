@@ -52,9 +52,30 @@ function createApiErrorContent(message: string) {
   return `${message} ${contactTip} ${contactLabel} ${CONTACT}`
 }
 
+function shouldSuppressNetworkToast(params: RequestParamsWithSilent) {
+  if (params.silent)
+    return true
+  if (typeof window === 'undefined')
+    return false
+  return window.location.pathname.includes('/providers')
+}
+
 export async function request<T>(params: RequestParamsWithSilent) {
   try {
     const res = await fetchService.request(params)
+    const contentType = res.headers.get('content-type') || ''
+    if (!contentType.includes('application/json')) {
+      const networkBusy = directTrans('common', 'networkBusy')
+      const message = res.ok ? networkBusy : `Request failed (${res.status}) ${params.url}`
+      if (!shouldSuppressNetworkToast(params) && typeof window !== 'undefined') {
+        notification.warning({
+          content: createApiErrorContent(message),
+          key: 'apiErrorMessage',
+          duration: 3,
+        })
+      }
+      return { code: res.status || -1, data: null as T, message, url: params.url }
+    }
     const data: ResponseType<T> = await res.json()
 
     // 使用项目的静态翻译方法（只使用国际化字段，不再使用硬编码回退）
@@ -80,7 +101,7 @@ export async function request<T>(params: RequestParamsWithSilent) {
     }
 
     if (data.code !== 0) {
-      if (!params.silent && typeof window !== 'undefined') {
+      if (!shouldSuppressNetworkToast(params) && typeof window !== 'undefined') {
         notification.warning({
           content: createApiErrorContent(data.message || networkBusy),
           key: 'apiErrorMessage',
@@ -95,7 +116,7 @@ export async function request<T>(params: RequestParamsWithSilent) {
   catch (e) {
     if (
       (useUserStore.getState().token || params.url.includes('login/'))
-      && !params.silent
+      && !shouldSuppressNetworkToast(params)
       && typeof window !== 'undefined'
     ) {
       const errText = directTrans('common', 'networkError')

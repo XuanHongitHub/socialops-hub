@@ -5,6 +5,8 @@
  */
 'use client'
 
+import type { ChatModel } from '@/api/types/ai'
+import { getChatModels } from '@/api/ai'
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { agentApi } from '@/api/agent'
@@ -81,6 +83,16 @@ export default function ChatDetailPage() {
 
   // 输入状态
   const [inputValue, setInputValue] = useState('')
+  const [chatModels, setChatModels] = useState<ChatModel[]>([])
+  const [selectedModel, setSelectedModel] = useState(() => typeof window === 'undefined' ? 'cx_agy' : localStorage.getItem('socialops_chat_model') || 'cx_agy')
+
+  useEffect(() => {
+    getChatModels('web', true).then((res) => {
+      const models = res?.data || []
+      setChatModels(models)
+      if (!models.some(model => model.name === selectedModel) && models[0]) setSelectedModel(models[0].name)
+    }).catch(() => null)
+  }, [])
 
   // 媒体上传
   const {
@@ -155,6 +167,7 @@ export default function ChatDetailPage() {
         await createTask({
           prompt: pendingTask.prompt,
           medias: pendingTask.medias,
+          model: pendingTask.model || selectedModel,
           t: t as (key: string) => string,
           onTaskIdReady: (newTaskId) => {
             // 使用 replace 替换 URL，不添加历史记录
@@ -216,6 +229,7 @@ export default function ChatDetailPage() {
       await continueTask({
         prompt: currentPrompt,
         medias: currentMedias,
+        model: selectedModel,
         t: t as (key: string) => string,
         taskId,
       })
@@ -241,6 +255,7 @@ export default function ChatDetailPage() {
     setMedias,
     scrollToBottom,
     setLocalIsGenerating,
+    selectedModel,
   ])
 
   /**
@@ -331,7 +346,7 @@ export default function ChatDetailPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full flex-col bg-muted/10">
       {/* 顶部导航 */}
       <ChatHeader
         title={task?.title}
@@ -364,8 +379,8 @@ export default function ChatDetailPage() {
       />
 
       {/* 底部输入区域 - 限宽居中 */}
-      <div className="p-4 shrink-0">
-        <div className="max-w-6xl mx-auto">
+      <div className="shrink-0 border-t border-border/70 bg-background/95 px-4 py-3 backdrop-blur">
+        <div className="mx-auto max-w-4xl">
           <ChatInput
             value={inputValue}
             onChange={setInputValue}
@@ -379,6 +394,9 @@ export default function ChatDetailPage() {
             isUploading={isUploading}
             placeholder={t('detail.continuePlaceholder')}
             mode="compact"
+            models={chatModels}
+            selectedModel={selectedModel}
+            onModelChange={(model) => { setSelectedModel(model); localStorage.setItem('socialops_chat_model', model) }}
           />
         </div>
       </div>

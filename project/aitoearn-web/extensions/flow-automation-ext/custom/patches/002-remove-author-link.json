@@ -1,0 +1,27 @@
+{
+  "id": "remove-author-link",
+  "description": "Remove author kylenguyen.me header CTA and report-bugs author link (same as Gemini/ChatGPT/Grok).",
+  "enabled": true,
+  "targetGlobs": ["assets/index.html-*.js"],
+  "replacements": [
+    {
+      "id": "remove-author-cta-block",
+      "find": ",ms(\"div\",qA,[ms(\"span\",YA,In(t.$t(\"sidePanel.header.communityCtaPrefix\")),1),ms(\"a\",XA,[hs(In(t.$t(\"sidePanel.header.communityCtaLink\"))+\" \",1),e[6]||(e[6]=ms(\"i\",{class:\"pi pi-external-link text-xs\",\"aria-hidden\":\"true\"},null,-1))])])",
+      "replace": "",
+      "required": true
+    },
+    {
+      "id": "blank-author-href",
+      "find": "XA={href:\"https://kylenguyen.me\",target:\"_blank\",rel:\"noopener noreferrer\",class:\"inline-flex items-center gap-1 text-primary hover:underline font-semibold\"}",
+      "replace": "XA={href:\"#\",target:\"_self\",rel:\"noopener noreferrer\",class:\"hidden\"}",
+      "required": false
+    },
+    {
+      "id": "disable-report-bugs-author-link",
+      "find": "l=()=>window.open(\"https://kylenguyen.me/?report-bugs\",\"_blank\")",
+      "replace": "l=()=>{}",
+      "required": false
+    }
+  ],
+  "regexReplacements": []
+}

@@ -41,19 +41,40 @@ export interface IPublishDialogPreviewProps {}
 const PublishDialogPreview = memo(
   forwardRef((_: IPublishDialogPreviewProps, ref: ForwardedRef<IPublishDialogPreviewRef>) => {
     const { t } = useTranslation('publish')
-    const { expandedPubItem } = usePublishDialog(
+    const { expandedPubItem, pubListChoosed, commonPubParams } = usePublishDialog(
       useShallow(state => ({
         expandedPubItem: state.expandedPubItem,
         pubList: state.pubList,
+        pubListChoosed: state.pubListChoosed,
+        commonPubParams: state.commonPubParams,
       })),
     )
     const videoRef = useRef<HTMLVideoElement>(null)
 
+    // Prefer expanded account; fall back to any selected account / common params with media
+    // (draft prefill can race and leave expandedPubItem empty briefly)
+    const previewItem = (() => {
+      if (expandedPubItem?.params.video || (expandedPubItem?.params.images?.length ?? 0) > 0)
+        return expandedPubItem
+      const fromChosen = pubListChoosed?.find(
+        i => i.params.video || (i.params.images?.length ?? 0) > 0,
+      )
+      if (fromChosen)
+        return fromChosen
+      if (commonPubParams?.video || (commonPubParams?.images?.length ?? 0) > 0) {
+        return {
+          account: expandedPubItem?.account || pubListChoosed?.[0]?.account,
+          params: commonPubParams,
+        } as typeof expandedPubItem
+      }
+      return expandedPubItem
+    })()
+
     useEffect(() => {
-      if (!expandedPubItem) {
+      if (!previewItem) {
         videoRef.current?.pause()
       }
-    }, [expandedPubItem])
+    }, [previewItem])
 
     return (
       <div className="bg-background w-[380px] overflow-hidden rounded-lg ml-[15px] h-[calc(100vh-80px)] flex flex-col">
@@ -61,20 +82,21 @@ const PublishDialogPreview = memo(
           <div className="font-semibold text-base px-5 pt-5 flex-shrink-0">
             {t('preview.title')}
           </div>
-          {expandedPubItem
-            && (expandedPubItem?.params.video
-              || (expandedPubItem?.params.images && expandedPubItem?.params.images?.length !== 0)) ? (
+          {previewItem
+            && (previewItem?.params.video
+              || (previewItem?.params.images && previewItem?.params.images?.length !== 0)) ? (
                 <div className="p-5 flex-1 min-h-0 flex flex-col">
-                  {expandedPubItem?.params.video ? (
+                  {previewItem?.params.video ? (
                     <div className="bg-black rounded-[30px] overflow-hidden box-border relative w-full flex-1 min-h-0 flex flex-col">
                       <div className="m-[5px] box-border flex-1 min-h-0 rounded-[30px] overflow-hidden flex flex-col">
                         <div className="absolute w-1/2 h-5 z-[8] rounded-b-[15px] top-0 left-1/2 -translate-x-1/2 bg-black" />
                         <div className="flex-1 min-h-0 flex items-center justify-center">
                           <video
                             ref={videoRef}
-                            src={expandedPubItem.params.video?.videoUrl}
+                            src={previewItem.params.video?.videoUrl}
                             controls
-                            poster={expandedPubItem.params.video?.cover?.imgUrl}
+                            playsInline
+                            poster={previewItem.params.video?.cover?.imgUrl}
                             className="w-full max-h-full object-contain rounded-none"
                           />
                         </div>
@@ -86,7 +108,7 @@ const PublishDialogPreview = memo(
                               :
                             </span>
                             <span className="text-white font-medium text-right flex-1 ml-2 text-shadow">
-                              {expandedPubItem.params.video?.filename || 'Unknown'}
+                              {previewItem.params.video?.filename || 'Unknown'}
                             </span>
                           </div>
                           <div className="flex justify-between items-center mb-1">
@@ -95,7 +117,7 @@ const PublishDialogPreview = memo(
                               :
                             </span>
                             <span className="text-white font-medium text-right flex-1 ml-2 text-shadow">
-                              {expandedPubItem.params.video?.filename
+                              {previewItem.params.video?.filename
                                 ?.split('.')
                                 .pop()
                                 ?.toUpperCase() || 'Unknown'}
@@ -107,9 +129,9 @@ const PublishDialogPreview = memo(
                               :
                             </span>
                             <span className="text-white font-medium text-right flex-1 ml-2 text-shadow">
-                              {expandedPubItem.params.video?.width
-                                && expandedPubItem.params.video?.height
-                                ? `${expandedPubItem.params.video.width}x${expandedPubItem.params.video.height}`
+                              {previewItem.params.video?.width
+                                && previewItem.params.video?.height
+                                ? `${previewItem.params.video.width}x${previewItem.params.video.height}`
                                 : 'Unknown'}
                             </span>
                           </div>
@@ -119,8 +141,8 @@ const PublishDialogPreview = memo(
                               :
                             </span>
                             <span className="text-white font-medium text-right flex-1 ml-2 text-shadow">
-                              {expandedPubItem.params.video?.size
-                                ? formatFileSize(expandedPubItem.params.video.size)
+                              {previewItem.params.video?.size
+                                ? formatFileSize(previewItem.params.video.size)
                                 : 'Unknown'}
                             </span>
                           </div>
@@ -130,8 +152,8 @@ const PublishDialogPreview = memo(
                               :
                             </span>
                             <span className="text-white font-medium text-right flex-1 ml-2 text-shadow">
-                              {expandedPubItem.params.video?.duration
-                                ? formatDuration(expandedPubItem.params.video.duration)
+                              {previewItem.params.video?.duration
+                                ? formatDuration(previewItem.params.video.duration)
                                 : 'Unknown'}
                             </span>
                           </div>
@@ -144,14 +166,14 @@ const PublishDialogPreview = memo(
                         <div className="absolute w-1/2 h-5 z-[8] rounded-b-[15px] top-0 left-1/2 -translate-x-1/2 bg-black" />
                         <div className="bg-white h-full box-border px-2.5 flex items-center [&_.swiper-pagination-bullet]:bg-primary [&_.swiper]:h-full [&_.swiper-slide]:h-full [&_img]:w-full [&_img]:h-full [&_img]:object-contain flex-1 min-h-0">
                           <Swiper
-                            loop={(expandedPubItem!.params.images?.length || 0) > 1}
+                            loop={(previewItem!.params.images?.length || 0) > 1}
                             modules={[Navigation, Pagination]}
                             pagination={{
                               clickable: true,
                               el: '.swiper-pagination',
                             }}
                           >
-                            {expandedPubItem!.params.images!.map((image, index) => (
+                            {previewItem!.params.images!.map((image, index) => (
                               <SwiperSlide key={index + image.imgUrl}>
                                 <img src={image.imgUrl} alt={`Image ${index + 1}`} />
                               </SwiperSlide>

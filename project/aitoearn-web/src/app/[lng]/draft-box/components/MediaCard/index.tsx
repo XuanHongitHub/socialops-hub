@@ -44,7 +44,15 @@ function formatDuration(seconds?: number): string {
 
 export const MediaCard = memo(({ media, onClick, batchMode, selected, onToggleSelect, actions }: MediaCardProps) => {
   const isVideo = media.type === 'video'
-  const thumbUrl = media.thumbUrl ? getOssUrl(media.thumbUrl) : media.url ? getOssUrl(media.url) : '/images/placeholder.png'
+  // Prefer cover/thumb; never feed a raw .mp4 into <img> (broken thumb → brand fallback mess).
+  const rawCover = (media as any).coverUrl || media.thumbUrl || ''
+  const safeCover = rawCover && !/\.mp4($|\?)/i.test(rawCover) ? rawCover : ''
+  const imageFallback = !isVideo && media.url && !/\.mp4($|\?)/i.test(media.url) ? media.url : ''
+  const thumbUrl = safeCover
+    ? getOssUrl(safeCover)
+    : imageFallback
+      ? getOssUrl(imageFallback)
+      : '/images/placeholder.png'
   const duration = media.metadata?.duration
 
   const handleClick = useCallback(() => {

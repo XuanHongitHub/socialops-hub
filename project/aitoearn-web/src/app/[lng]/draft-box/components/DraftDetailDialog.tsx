@@ -8,9 +8,10 @@
 
 import type { PromotionMaterial } from '@/app/[lng]/brand-promotion/brandPromotionStore/types'
 import type { PlatType } from '@/app/config/platConfig'
-import { ArrowRightLeft, Calendar, Edit, Image as ImageIcon, Loader2, Send, Trash2, Video } from 'lucide-react'
+import { ArrowRightLeft, Calendar, Edit, FolderOpen, Image as ImageIcon, Loader2, RefreshCw, Send, Sparkles, Trash2, Video } from 'lucide-react'
 import NextImage from 'next/image'
 import { memo, useCallback, useState } from 'react'
+import { apiUpdateMaterial } from '@/api/material'
 import { Navigation, Pagination } from 'swiper/modules'
 import { Swiper, SwiperSlide } from 'swiper/react'
 import { useShallow } from 'zustand/react/shallow'
@@ -76,7 +77,26 @@ function MediaImage({ src, alt }: { src: string, alt: string }) {
 
 // 媒体预览组件 - 使用 Swiper 轮播
 const MediaPreview = memo(({ material }: { material: PromotionMaterial }) => {
-  const mediaList = material.mediaList || []
+  /** Prefer local archive routes; rewrite legacy /api/ai/assets/:id/file and drop expired Grok CDN. */
+  const durableMediaUrl = (url: string | undefined | null) => {
+    const u = String(url || '').trim()
+    if (!u)
+      return ''
+    if (/\/api\/ai\/assets\/local-file/i.test(u))
+      return u
+    const byPath = u.match(/\/api\/ai\/assets\/([^/?#]+)\/file\/?$/i)
+    if (byPath?.[1])
+      return `/api/ai/assets/local-file?id=${encodeURIComponent(byPath[1])}`
+    const byFile = u.match(/\/api\/ai\/assets\/file\/([^/?#]+)/i)
+    if (byFile?.[1])
+      return `/api/ai/assets/local-file?id=${encodeURIComponent(byFile[1])}`
+    if (/vidgen\.x\.ai|xai-vidgen|xai-video/i.test(u))
+      return ''
+    return u
+  }
+  const mediaList = (material.mediaList || [])
+    .map(m => ({ ...m, url: durableMediaUrl(m.url) }))
+    .filter(m => Boolean(m.url))
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isHovered, setIsHovered] = useState(false)
 
@@ -182,6 +202,7 @@ interface DraftDetailContentProps {
 const DraftDetailContent = memo(({ allowTransfer = true }: DraftDetailContentProps) => {
   const { t } = useTransClient('brandPromotion')
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [regenBusy, setRegenBusy] = useState(false)
 
   const {
     selectedDraft,
@@ -203,6 +224,25 @@ const DraftDetailContent = memo(({ allowTransfer = true }: DraftDetailContentPro
 
   const openTransferDialog = useTransferDraftDialogStore(state => state.openDialog)
 
+  const localVideoAssetId = selectedDraft?.mediaList
+    ?.map(media => /^\/api\/ai\/assets\/([^/]+)\/file(?:\?|$)/.exec(media.url)?.[1])
+    .find(Boolean)
+
+  const handleOpenLocalFolder = useCallback(async () => {
+    if (!localVideoAssetId)
+      return
+    const response = await fetch('/api/ai/assets/open-folder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assetId: localVideoAssetId }),
+    })
+    const result = await response.json().catch(() => null)
+    if (!response.ok) {
+      toast.error(result?.message || 'Unable to open local folder')
+      return
+    }
+    toast.success('Opened local video folder')
+  }, [localVideoAssetId])
   // 处理编辑
   const handleEdit = useCallback(() => {
     if (selectedDraft) {
@@ -248,6 +288,118 @@ const DraftDetailContent = memo(({ allowTransfer = true }: DraftDetailContentPro
     setDeleteConfirmOpen(false)
   }, [selectedDraft, deleteMaterial, closeDraftDetailDialog, t])
 
+  /**
+   * Regen caption/title/tags only (keeps video/media).
+   * BugSell brand SEO — strips seller-shop CTAs like "Shop now at City Cats".
+   * Agents: same entry as Publish SEO auto-fill, scoped to this draft.
+   */
+  const handleRegenCopy = useCallback(async () => {
+    if (!selectedDraft || regenBusy)
+      return
+    setRegenBusy(true)
+    try {
+      const gp = (selectedDraft.generationParams || {}) as Record<string, any>
+      const platforms = Array.isArray(selectedDraft.accountTypes) && selectedDraft.accountTypes.length
+        ? selectedDraft.accountTypes
+        : (Array.isArray(gp.platforms) ? gp.platforms : ['tiktok', 'instagram', 'facebook', 'youtube', 'pinterest'])
+
+      const res = await fetch('/api/ai/publish-seo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'auto',
+          platforms,
+          productTitle: gp.productTitle || selectedDraft.title || '',
+          productUrl: gp.productUrl || '',
+          productNotes: gp.productNotes || '',
+          title: selectedDraft.title || '',
+          des: selectedDraft.desc || '',
+          topics: selectedDraft.topics || [],
+        }),
+      })
+      const body = await res.json().catch(() => null)
+      if (!res.ok || body?.code !== 0) {
+        throw new Error(body?.message || `SEO regen failed (${res.status})`)
+      }
+
+      const packs = body?.data?.packs || body?.data || {}
+      const firstPlat = platforms.map(String)[0]
+      const pack = packs[firstPlat]
+        || packs[String(firstPlat).toLowerCase()]
+        || Object.values(packs).find((p: any) => p && (p.title || p.des)) as any
+        || null
+
+      // Prefer first connected platform pack; merge topics unique across packs lightly
+      const title = String(pack?.title || selectedDraft.title || '').trim()
+      const desc = String(pack?.des || pack?.caption || selectedDraft.desc || '').trim()
+      let topics: string[] = Array.isArray(pack?.topics)
+        ? pack.topics.map(String)
+        : (selectedDraft.topics || [])
+      // Collect a few topics from other packs for multi-platform drafts
+      if (Object.keys(packs).length > 1) {
+        const extra = Object.values(packs).flatMap((p: any) => Array.isArray(p?.topics) ? p.topics.map(String) : [])
+        topics = [...new Set([...topics, ...extra])].slice(0, 8)
+      }
+
+      const updateRes = await apiUpdateMaterial(selectedDraft.id, {
+        title,
+        desc,
+        topics,
+        generationParams: {
+          ...gp,
+          lastCopyRegenAt: new Date().toISOString(),
+          lastCopyRegenProvider: body?.data?.provider || body?.provider || 'auto',
+          platformSeoPacks: packs,
+        },
+      })
+      if (updateRes?.code !== 0 && updateRes?.code !== '0') {
+        // Local PUT may still return data on success
+        if (!updateRes?.data)
+          throw new Error(updateRes?.message || 'Failed to save regenerated copy')
+      }
+
+      const saved = (updateRes?.data || {
+        ...selectedDraft,
+        title,
+        desc,
+        topics,
+      }) as PromotionMaterial
+
+      // Refresh open dialog + list row without full reload
+      usePlanDetailStore.setState((state) => {
+        const materials = state.materials.map(m =>
+          m.id === selectedDraft.id
+            ? { ...m, title: saved.title || title, desc: saved.desc || desc, topics: saved.topics || topics }
+            : m,
+        )
+        return {
+          materials,
+          selectedDraft: state.selectedDraft?.id === selectedDraft.id
+            ? {
+                ...state.selectedDraft,
+                title: saved.title || title,
+                desc: saved.desc || desc,
+                topics: saved.topics || topics,
+                generationParams: {
+                  ...(state.selectedDraft.generationParams || {}),
+                  lastCopyRegenAt: new Date().toISOString(),
+                  platformSeoPacks: packs,
+                },
+              }
+            : state.selectedDraft,
+        }
+      })
+
+      toast.success('Copy regenerated · BugSell brand (video kept)')
+    }
+    catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    }
+    finally {
+      setRegenBusy(false)
+    }
+  }, [selectedDraft, regenBusy])
+
   if (!selectedDraft)
     return null
 
@@ -256,45 +408,43 @@ const DraftDetailContent = memo(({ allowTransfer = true }: DraftDetailContentPro
       {/* 无障碍：隐藏的标题 */}
       <DialogTitle className="sr-only">{t('draft.detailTitle')}</DialogTitle>
 
-      {/* PC端左右布局，移动端垂直布局 */}
-      <div className="flex flex-col md:flex-row md:gap-6 md:h-[80vh]">
+      {/* PC: wider split; mobile stacks — footer always outside scroll so Regen stays visible */}
+      <div className="flex min-h-0 max-h-[min(86vh,860px)] flex-col md:flex-row md:gap-6">
         {/* 左侧：媒体区域 */}
-        <div className="md:w-3/5 flex-shrink-0 h-[40vh] md:h-full">
+        <div className="h-[38vh] min-w-0 shrink-0 md:h-auto md:max-h-[min(86vh,860px)] md:w-[55%] md:min-w-0">
           <MediaPreview material={selectedDraft} />
         </div>
 
-        {/* 右侧：信息区域 - 移动端限制最大高度使 ScrollArea 生效 */}
-        <div className="md:w-2/5 mt-4 md:mt-0 flex flex-col max-h-[35vh] md:max-h-none md:h-full">
-          {/* 可滚动内容 */}
-          <ScrollArea className="flex-1 min-h-0">
-            <div className="space-y-4 pr-2">
+        {/* 右侧：info scroll + sticky actions */}
+        <div className="mt-3 flex min-h-0 min-w-0 flex-1 flex-col md:mt-0 md:min-w-[22rem]">
+          {/* 可滚动内容 — leaves room for footer */}
+          <ScrollArea className="min-h-0 flex-1 pr-1">
+            <div className="space-y-3 pb-2 pr-2">
               {/* 标题 */}
               <div>
-                <h3 className="text-lg font-medium">
+                <h3 className="text-lg font-medium leading-snug">
                   {selectedDraft.title || t('material.untitled')}
                 </h3>
               </div>
 
               {/* 描述 */}
-              {selectedDraft.desc && (
-                <div>
+              <div className="space-y-2">
+                {selectedDraft.desc && (
                   <p className="text-sm text-muted-foreground whitespace-pre-wrap">
                     {selectedDraft.desc}
                   </p>
-                </div>
-              )}
-
-              {/* 话题 */}
-              {selectedDraft.topics && selectedDraft.topics.length > 0 && (
-                <div className="flex flex-wrap gap-x-2 gap-y-1">
-                  {selectedDraft.topics.map((topic, index) => (
-                    <span key={index} className="text-sm text-primary">
-                      #
-                      {topic}
-                    </span>
-                  ))}
-                </div>
-              )}
+                )}
+                {selectedDraft.topics && selectedDraft.topics.length > 0 && (
+                  <div className="flex flex-wrap gap-x-2 gap-y-1">
+                    {selectedDraft.topics.map((topic, index) => (
+                      <span key={index} className="text-sm text-primary">
+                        #
+                        {topic}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {/* AI 生成参数 */}
               {selectedDraft.generationParams && (
@@ -377,44 +527,79 @@ const DraftDetailContent = memo(({ allowTransfer = true }: DraftDetailContentPro
             </div>
           </ScrollArea>
 
-          {/* 固定底部的操作按钮 */}
-          <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4 flex-shrink-0">
-            <Button
-              data-testid="draftbox-detail-edit-btn"
-              variant="outline"
-              className="min-w-[calc(50%-0.25rem)] flex-1 cursor-pointer md:min-w-0"
-              onClick={handleEdit}
-            >
-              <Edit className="h-4 w-4 mr-2" />
-              {t('draft.edit')}
-            </Button>
-            {allowTransfer && (
+          {/* Sticky footer — always visible (not inside ScrollArea) */}
+          <div className="mt-3 flex shrink-0 flex-col gap-2 border-t border-border/70 bg-background pt-3">
+            <div className="grid grid-cols-2 gap-2">
               <Button
-                variant="outline"
-                className="min-w-[calc(50%-0.25rem)] flex-1 cursor-pointer md:min-w-0"
-                onClick={handleTransfer}
+                data-testid="draftbox-detail-publish-btn"
+                className="h-10 cursor-pointer gap-2 px-4 text-sm font-semibold shadow-sm"
+                onClick={handlePublish}
               >
-                <ArrowRightLeft className="h-4 w-4 mr-2" />
-                {t('draftManage.transfer')}
+                <Send className="h-4 w-4 shrink-0" />
+                {t('draft.publish')}
               </Button>
-            )}
-            <Button
-              data-testid="draftbox-detail-publish-btn"
-              className="min-w-[calc(50%-0.25rem)] flex-1 cursor-pointer md:min-w-0"
-              onClick={handlePublish}
-            >
-              <Send className="h-4 w-4 mr-2" />
-              {t('draft.publish')}
-            </Button>
-            <Button
-              data-testid="draftbox-detail-delete-btn"
-              variant="outline"
-              className="min-w-[calc(50%-0.25rem)] flex-1 cursor-pointer text-destructive hover:text-destructive md:min-w-0"
-              onClick={() => setDeleteConfirmOpen(true)}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              {t('draft.delete')}
-            </Button>
+              <Button
+                type="button"
+                data-testid="draftbox-detail-regen-copy-btn"
+                variant="secondary"
+                className="h-10 cursor-pointer gap-2 border border-primary/20 bg-primary/10 px-4 text-sm font-semibold text-foreground hover:bg-primary/15"
+                disabled={regenBusy || isSubmitting}
+                onClick={() => void handleRegenCopy()}
+                title="Rewrite title, caption & tags for BugSell SEO — keeps video"
+              >
+                {regenBusy
+                  ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                  : <RefreshCw className="h-4 w-4 shrink-0" />}
+                {regenBusy ? 'Rewriting…' : 'Regen copy'}
+                {!regenBusy && <Sparkles className="h-3.5 w-3.5 shrink-0 opacity-80" />}
+              </Button>
+            </div>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-[auto_1fr_1fr_1fr]">
+              {localVideoAssetId
+                ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9 w-9 shrink-0 cursor-pointer px-0"
+                      title="Open local video folder"
+                      aria-label="Open local video folder"
+                      onClick={handleOpenLocalFolder}
+                    >
+                      <FolderOpen className="h-4 w-4" />
+                    </Button>
+                  )
+                : <span className="hidden sm:block" />}
+              <Button
+                data-testid="draftbox-detail-edit-btn"
+                variant="outline"
+                className="h-9 cursor-pointer gap-1.5 px-3 text-[13px]"
+                onClick={handleEdit}
+              >
+                <Edit className="h-3.5 w-3.5 shrink-0" />
+                {t('draft.edit')}
+              </Button>
+              {allowTransfer
+                ? (
+                    <Button
+                      variant="outline"
+                      className="h-9 cursor-pointer gap-1.5 px-3 text-[13px]"
+                      onClick={handleTransfer}
+                    >
+                      <ArrowRightLeft className="h-3.5 w-3.5 shrink-0" />
+                      {t('draftManage.transfer')}
+                    </Button>
+                  )
+                : <span />}
+              <Button
+                data-testid="draftbox-detail-delete-btn"
+                variant="outline"
+                className="h-9 cursor-pointer gap-1.5 px-3 text-[13px] text-destructive hover:bg-destructive/5 hover:text-destructive"
+                onClick={() => setDeleteConfirmOpen(true)}
+              >
+                <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                {t('draft.delete')}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -467,7 +652,16 @@ export const DraftDetailDialog = memo(({ allowTransfer = true }: DraftDetailDial
 
   return (
     <Dialog open onOpenChange={closeDraftDetailDialog}>
-      <DialogContent data-testid="draftbox-detail-dialog" className="sm:max-w-md md:max-w-6xl">
+      <DialogContent
+        data-testid="draftbox-detail-dialog"
+        className={cn(
+          // Override Dialog default sm:w-[min(1100px,95vw)] — need room for 2-row actions + Regen
+          'gap-0 p-3 sm:p-5',
+          'w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)]',
+          'sm:w-[min(80rem,96vw)] sm:max-w-[min(80rem,96vw)]',
+          'max-h-[min(92vh,920px)] overflow-hidden',
+        )}
+      >
         <DraftDetailContent allowTransfer={allowTransfer} />
       </DialogContent>
     </Dialog>

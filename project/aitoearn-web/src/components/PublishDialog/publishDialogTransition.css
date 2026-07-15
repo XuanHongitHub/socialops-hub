@@ -6,43 +6,69 @@
 /* 右侧面板进入动画 - 初始状态 */
 .right-enter {
   width: 0;
+  min-width: 0;
+  overflow: hidden;
+  opacity: 0.6;
 }
 
 /* 右侧面板进入动画 - 激活状态 */
-.right-enter-active {
+.right-enter-active,
+.right-enter-done {
   width: 380px;
-  transition: width 300ms;
+  min-width: 380px;
+  opacity: 1;
+  transition: width 300ms ease, min-width 300ms ease, opacity 200ms ease;
 }
 
 /* 右侧面板退出动画 - 初始状态 */
 .right-exit {
   width: 380px;
+  min-width: 380px;
+  overflow: hidden;
 }
 
 /* 右侧面板退出动画 - 激活状态 */
 .right-exit-active {
   width: 0;
-  transition: width 300ms;
+  min-width: 0;
+  opacity: 0;
+  transition: width 300ms ease, min-width 300ms ease, opacity 200ms ease;
 }
 
 /* 左侧面板进入动画 - 初始状态 */
 .left-enter {
   width: 0;
+  min-width: 0;
+  overflow: hidden;
+  opacity: 0.6;
 }
 
-/* 左侧面板进入动画 - 激活状态 */
-.left-enter-active {
-  width: 380px;
-  transition: width 300ms;
+/* 左侧面板进入动画 - 激活 / 完成：必须 giữ width, nếu không input bị bóp hẹp */
+.left-enter-active,
+.left-enter-done {
+  width: 400px;
+  min-width: 400px;
+  opacity: 1;
+  transition: width 300ms ease, min-width 300ms ease, opacity 200ms ease;
 }
 
 /* 左侧面板退出动画 - 初始状态 */
 .left-exit {
-  width: 380px;
+  width: 400px;
+  min-width: 400px;
+  overflow: hidden;
 }
 
 /* 左侧面板退出动画 - 激活状态 */
 .left-exit-active {
   width: 0;
-  transition: width 300ms;
+  min-width: 0;
+  opacity: 0;
+  transition: width 300ms ease, min-width 300ms ease, opacity 200ms ease;
+}
+
+/* 右侧预览同理 */
+.right-enter-done {
+  width: 380px;
+  min-width: 380px;
 }

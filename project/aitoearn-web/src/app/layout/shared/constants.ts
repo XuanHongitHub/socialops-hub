@@ -25,5 +25,6 @@ export const SITE_SWITCH_TRANSLATION_KEY = isChina ? 'switchToInternational' : '
  */
 export const NAV_GROUP_KEYS = [
   'tasksHistory',
+  'providerConsole',
   'header.materialLibrary',
 ] as const

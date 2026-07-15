@@ -230,8 +230,35 @@ export function isAspectRatioInRange(
   maxRatio: number,
   threshold: number = 0.02,
 ): boolean {
-  if (height === 0)
-    return false
+  // Unknown dimensions (remote URL probe failed / CORS) — do not hard-fail publish
+  if (!width || !height || height === 0)
+    return true
   const actualRatio = width / height
   return actualRatio >= minRatio - threshold && actualRatio <= maxRatio + threshold
+}
+
+/** Synthetic pixel size from aspect label for prefill when probe fails */
+export function dimensionsFromAspectLabel(aspect?: string, longSide = 1920): { width: number, height: number } {
+  const a = String(aspect || '9:16').trim()
+  const map: Record<string, [number, number]> = {
+    '9:16': [1080, 1920],
+    '4:5': [1080, 1350],
+    '3:4': [1080, 1440],
+    '1:1': [1080, 1080],
+    '16:9': [1920, 1080],
+  }
+  const pair = map[a]
+  if (pair)
+    return { width: pair[0], height: pair[1] }
+  const m = a.match(/^(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)$/)
+  if (m) {
+    const w = Number(m[1])
+    const h = Number(m[2])
+    if (w > 0 && h > 0) {
+      if (h >= w)
+        return { width: Math.round(longSide * (w / h)), height: longSide }
+      return { width: longSide, height: Math.round(longSide * (h / w)) }
+    }
+  }
+  return { width: 1080, height: 1920 }
 }

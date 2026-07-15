@@ -25,9 +25,28 @@ export interface VideoModelStaticConfig {
   maxVideoDuration: number
 }
 
-/** 允许上传图片的 modes */
-const IMAGE_UPLOAD_MODES = new Set(['image2video', 'multi-image2video', 'flf2video', 'lf2video'])
+/** 允许上传图片的 modes（兼容 jimeng image2video + Grok image-to-video） */
+const IMAGE_UPLOAD_MODES = new Set([
+  'image2video',
+  'multi-image2video',
+  'flf2video',
+  'lf2video',
+  'image-to-video',
+  'image_to_video',
+  'i2v',
+  'reference_to_video',
+  'reference-to-video',
+])
 const DEFAULT_VIDEO_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4']
+
+function modelSupportsImageInput(model: VideoModelInfo) {
+  if (model.modes?.some(m => IMAGE_UPLOAD_MODES.has(m) || /image.?to.?video|image2video|i2v|reference.?to.?video/i.test(m)))
+    return true
+  // Grok pool models always accept product/mockup refs for commerce I2V
+  if (model.channel === 'grok' || model.name?.startsWith('grok::'))
+    return true
+  return (model.maxInputImages ?? 0) > 0
+}
 
 function normalizeOptionValue(value: string) {
   return value.trim()
@@ -72,11 +91,16 @@ export function getVideoModelAspectRatios(model?: VideoModelInfo): string[] {
 
 /** 从 API 返回的 VideoModelInfo 动态生成静态配置 */
 export function getVideoModelConfigFromApi(model: VideoModelInfo): VideoModelStaticConfig {
+  const supportsImage = modelSupportsImageInput(model)
+  const maxFromApi = Number(model.maxInputImages)
   return {
     supportedRatios: new Set(getVideoModelAspectRatios(model)),
-    maxImages: model.modes.some(m => IMAGE_UPLOAD_MODES.has(m)) ? model.maxInputImages : 0,
-    maxVideos: model.modes.includes('video2video') ? 1 : 0,
-    maxVideoDuration: model.durations.length > 0 ? Math.max(...model.durations) : 8,
+    // Never collapse to 0 for models that accept refs — 0 was wiping BugSell product photos on model switch
+    maxImages: supportsImage
+      ? (Number.isFinite(maxFromApi) && maxFromApi > 0 ? maxFromApi : 3)
+      : 0,
+    maxVideos: model.modes?.includes('video2video') ? 1 : 0,
+    maxVideoDuration: model.durations?.length > 0 ? Math.max(...model.durations) : 8,
   }
 }
 

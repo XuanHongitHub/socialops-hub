@@ -1,0 +1,58 @@
+{
+  "manifest_version": 3,
+  "name": "SocialOps Hub Bridge",
+  "version": "0.3.0",
+  "description": "Local-first bridge for SocialOps Hub — job lease, heartbeat, step runner for automation packs.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "activeTab",
+    "alarms"
+  ],
+  "host_permissions": [
+    "http://localhost:6061/*",
+    "http://127.0.0.1:6061/*",
+    "http://localhost:18080/*",
+    "http://127.0.0.1:18080/*",
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "https://grok.com/*",
+    "https://gemini.google.com/*",
+    "https://labs.google/*",
+    "https://x.com/*",
+    "https://www.facebook.com/*",
+    "https://www.instagram.com/*",
+    "https://www.pinterest.com/*",
+    "https://studio.youtube.com/*",
+    "https://www.tiktok.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://grok.com/*",
+        "https://gemini.google.com/*",
+        "https://labs.google/*",
+        "https://x.com/*",
+        "https://www.facebook.com/*",
+        "https://www.instagram.com/*",
+        "https://www.pinterest.com/*",
+        "https://studio.youtube.com/*",
+        "https://www.tiktok.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "SocialOps Hub Bridge"
+  }
+}

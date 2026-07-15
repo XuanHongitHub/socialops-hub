@@ -83,7 +83,25 @@ interface DraftCardProps {
 // 草稿卡片组件（小红书风格）
 const DraftCard = memo(({ material, onClick, batchMode, selected, onToggleSelect, useCountLabel }: DraftCardProps) => {
   const { t } = useTransClient('brandPromotion')
-  const coverUrl = material.coverUrl || '/images/placeholder.png'
+  const videoUrl = material.mediaList?.find(m => m.type === 'video')?.url
+  const productStill = typeof material.generationParams?.productImageUrl === 'string'
+    ? material.generationParams.productImageUrl
+    : ''
+  const coverUrl = (material.coverUrl && !/\.mp4($|\?)/i.test(material.coverUrl))
+    ? material.coverUrl
+    : (material.mediaList?.find(m => m.type === 'img')?.url)
+      || productStill
+      || '/images/placeholder.png'
+  const isVideoCard = Boolean(videoUrl) || material.mediaList?.some(m => m.type === 'video')
+  const coverIsProductStill = Boolean(
+    productStill
+    && coverUrl
+    && (coverUrl === productStill || coverUrl.includes(String(productStill).slice(-48))),
+  )
+  const isPosterCover = /^\/api\/assets\/poster\//.test(coverUrl)
+  const preferVideoFrame = Boolean(isVideoCard && videoUrl && (!material.coverUrl || coverIsProductStill) && !isPosterCover)
+  const durationSec = Number(material.generationParams?.duration)
+  const durationLabel = Number.isFinite(durationSec) && durationSec > 0 ? `${Math.round(durationSec)}s` : ''
 
   const handleClick = useCallback(() => {
     if (batchMode) {
@@ -125,17 +143,42 @@ const DraftCard = memo(({ material, onClick, batchMode, selected, onToggleSelect
       )}
 
       {/* 封面图 - 保持原始比例，圆角独立 */}
-      <div className="relative w-full overflow-hidden rounded-xl">
-        <LazyImage
-          src={coverUrl}
-          alt={material.title || t('material.draft')}
-          width={400}
-          height={300}
-          className="w-full h-auto transition-transform duration-300 group-hover:scale-105"
-          skeletonClassName="rounded-xl"
-          placeholderHeight={150}
-          style={{ aspectRatio: 'auto' }}
-        />
+      <div className="relative w-full overflow-hidden rounded-xl bg-muted">
+        {preferVideoFrame && videoUrl
+          ? (
+              <video
+                src={`${videoUrl}#t=1.2`}
+                poster={productStill || undefined}
+                className="w-full h-auto max-h-[280px] object-cover transition-transform duration-300 group-hover:scale-105"
+                muted
+                playsInline
+                preload="metadata"
+              />
+            )
+          : (
+              <LazyImage
+                src={coverUrl.startsWith('http') || coverUrl.startsWith('/') ? coverUrl : coverUrl}
+                alt={material.title || t('material.draft')}
+                width={400}
+                height={300}
+                className="w-full h-auto transition-transform duration-300 group-hover:scale-105"
+                skeletonClassName="rounded-xl"
+                placeholderHeight={150}
+                style={{ aspectRatio: 'auto' }}
+              />
+            )}
+        {isVideoCard && (
+          <div className="absolute bottom-2 left-2 flex items-center gap-1">
+            <span className="rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+              Video
+            </span>
+            {durationLabel && (
+              <span className="rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white/90">
+                {durationLabel}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* hover 时显示描述遮罩 - 批量模式下隐藏 */}
         {!batchMode && material.desc && (
@@ -272,6 +315,9 @@ export const DraftListSection = memo(({
     loadMoreMaterials,
     openDraftDetailDialog,
     openGenerationDetailDialog,
+    dismissGenerationTasks,
+    cancelGenerationTask,
+    retryGenerationTask,
     toggleMaterialSelection,
     fetchMaterials,
   } = usePlanDetailStore(
@@ -287,16 +333,22 @@ export const DraftListSection = memo(({
       loadMoreMaterials: state.loadMoreMaterials,
       openDraftDetailDialog: state.openDraftDetailDialog,
       openGenerationDetailDialog: state.openGenerationDetailDialog,
+      dismissGenerationTasks: state.dismissGenerationTasks,
+      cancelGenerationTask: state.cancelGenerationTask,
+      retryGenerationTask: state.retryGenerationTask,
       toggleMaterialSelection: state.toggleMaterialSelection,
       fetchMaterials: state.fetchMaterials,
     })),
   )
 
-  const { draftTotal, videoTotal, imgTotal, fetchMediaList, fetchAllList, videoInitialized, imgInitialized, allInitialized } = useMediaTabStore(
+  const { draftTotal, videoTotal, imgTotal, uniqueTotal, allMergedCount, fetchMediaList, fetchAllList, videoInitialized, imgInitialized, allInitialized } = useMediaTabStore(
     useShallow(state => ({
       draftTotal: state.all.draftTotal,
       videoTotal: state.video.initialized ? state.video.total : state.all.videoTotal,
       imgTotal: state.img.initialized ? state.img.total : state.all.imgTotal,
+      // Unique All-tab count (no draft+flatten double count). Fallbacks for pre-init.
+      uniqueTotal: state.all.uniqueTotal,
+      allMergedCount: state.all.mergedList.length,
       fetchMediaList: state.fetchMediaList,
       fetchAllList: state.fetchAllList,
       videoInitialized: state.video.initialized,
@@ -322,7 +374,12 @@ export const DraftListSection = memo(({
     () => visibleGenerationTasks.filter(task => getDraftGenerationTaskTarget(task) === 'img'),
     [visibleGenerationTasks],
   )
-  const allTotal = draftTotal + videoTotal + imgTotal + visibleGenerationTasks.length
+  // Badge must match what All tab actually shows (drafts + orphan media), never draft+video flatten.
+  const allTotal = (
+    allInitialized
+      ? (uniqueTotal > 0 ? uniqueTotal : allMergedCount)
+      : Math.max(draftTotal, videoTotal + imgTotal)
+  ) + visibleGenerationTasks.length
 
   const exitMediaBatchMode = useMediaTabStore(state => state.exitBatchMode)
   const enterMediaBatchMode = useMediaTabStore(state => state.enterBatchMode)
@@ -426,7 +483,14 @@ export const DraftListSection = memo(({
 
           {/* 生成中卡片 - 批量模式隐藏 */}
           {!batchMode && visibleDraftGenerationTasks.map(task => (
-            <GeneratingTaskCard key={task.id} task={task} onClick={openGenerationDetailDialog} />
+            <GeneratingTaskCard
+              key={task.id}
+              task={task}
+              onClick={openGenerationDetailDialog}
+              onDismiss={id => dismissGenerationTasks([id])}
+              onCancel={id => void cancelGenerationTask(id)}
+              onRetry={id => void retryGenerationTask(id)}
+            />
           ))}
 
           {/* 草稿数据 */}

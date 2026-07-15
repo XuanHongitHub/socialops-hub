@@ -38,6 +38,38 @@ export class LoginController {
   ) { }
 
   @ApiDoc({
+    summary: 'Local admin login',
+    description: 'Self-host bootstrap login for the local admin account. Requires LOCAL_ADMIN_LOGIN_ENABLED=true.',
+  })
+  @Public()
+  @Get('local-admin')
+  async loginLocalAdmin() {
+    if (process.env.LOCAL_ADMIN_LOGIN_ENABLED !== 'true')
+      throw new AppException(ResponseCode.ValidationFailed, 'Local admin login is disabled')
+
+    const mail = process.env.LOCAL_ADMIN_MAIL || 'admin@aitoearn.local'
+    let userInfo = await this.userService.getUserInfoByMail(mail, true)
+
+    if (!userInfo || userInfo.isDelete)
+      userInfo = await this.userService.createUserByMail(mail)
+
+    if (userInfo.status === UserStatus.STOP)
+      throw new AppException(ResponseCode.UserStatusError)
+
+    const token = this.authService.generateToken(userInfo)
+    const tokenInfo = this.authService.decodeToken(token)
+
+    this.userService.afterLogin(userInfo)
+
+    return {
+      type: 'login',
+      token,
+      exp: tokenInfo.exp,
+      userInfo,
+    }
+  }
+
+  @ApiDoc({
     summary: '发送邮箱登录验证码',
     description: '向邮箱发送验证码，用于登录或注册。',
     body: MailLoginSchema,
@@ -360,3 +392,4 @@ export class LoginController {
     return res
   }
 }
+

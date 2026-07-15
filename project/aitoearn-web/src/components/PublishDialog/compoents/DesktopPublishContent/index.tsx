@@ -20,6 +20,7 @@ import { useTransClient } from '@/app/i18n/client'
 import { useChannelManagerStore } from '@/components/ChannelManager/channelManagerStore'
 import AccountSelector from '@/components/PublishDialog/compoents/AccountSelector'
 import ErrorSummary from '@/components/PublishDialog/compoents/ErrorSummary'
+import { SeoAutoFillBar } from '@/components/PublishDialog/compoents/SeoAutoFillBar'
 import PlatParamsSetting from '@/components/PublishDialog/compoents/PlatParamsSetting'
 import PublishDialogAi from '@/components/PublishDialog/compoents/PublishDialogAi'
 import PublishDialogPreview from '@/components/PublishDialog/compoents/PublishDialogPreview'
@@ -180,17 +181,14 @@ export const DesktopPublishContent = memo(
       setStep(1)
     }, [setExpandedPubItem, setStep])
 
-    // 处理错误点击，展开对应账号
+    // 处理错误点击，展开对应账号（step 0 multi + step 1)
     const handleErrorAccountClick = useCallback(
       (accountId: string) => {
         const pubItem = pubListChoosed.find(v => v.account.id === accountId)
-        if (pubItem) {
-          if (step === 1) {
-            setExpandedPubItem(pubItem)
-          }
-        }
+        if (pubItem)
+          setExpandedPubItem(pubItem)
       },
-      [pubListChoosed, step, setExpandedPubItem],
+      [pubListChoosed, setExpandedPubItem],
     )
 
     // 处理参数变更
@@ -397,6 +395,11 @@ export const DesktopPublishContent = memo(
               onOfflineClick={handleOfflineAvatarClick}
             />
 
+            {/* SEO multi-platform auto-fill (Grok / 9Router) */}
+            {step === 0 && pubListChoosed.length > 0 && (
+              <SeoAutoFillBar className="mt-3" />
+            )}
+
             {/* 错误汇总 */}
             <ErrorSummary
               pubListChoosed={pubListChoosed}
@@ -416,18 +419,40 @@ export const DesktopPublishContent = memo(
                     />
                   )}
                   {pubListChoosed.length >= 2 && (
-                    <PubParmasTextarea
-                      key={`${commonPubParams.images?.length || 0}-${
-                        commonPubParams.video ? 'video' : 'no-video'
-                      }`}
-                      platType={PlatType.Instagram}
-                      rows={16}
-                      desValue={commonPubParams.des}
-                      videoFileValue={commonPubParams.video}
-                      imageFileListValue={commonPubParams.images}
-                      onChange={handleParamsChange}
-                      onImageToImage={onImageToImage}
-                    />
+                    <>
+                      {/* Shared caption + media for all selected channels */}
+                      <PubParmasTextarea
+                        key={`${commonPubParams.images?.length || 0}-${
+                          commonPubParams.video ? 'video' : 'no-video'
+                        }-${commonPubParams.des?.slice(0, 24) || ''}`}
+                        platType={PlatType.Instagram}
+                        rows={12}
+                        desValue={commonPubParams.des}
+                        videoFileValue={commonPubParams.video}
+                        imageFileListValue={commonPubParams.images}
+                        onChange={handleParamsChange}
+                        onImageToImage={onImageToImage}
+                      />
+                      {/* Per-channel settings always visible — click a row to expand (no disable/re-enable hack) */}
+                      <div className="mt-4 space-y-2" data-testid="publish-per-channel-settings">
+                        <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+                          <p className="text-sm font-medium text-foreground">
+                            {t('buttons.customizePerAccount')}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {t('tips.clickChannelToConfigure')}
+                          </p>
+                        </div>
+                        {pubListChoosed.map(v => (
+                          <PlatParamsSetting
+                            key={v.account.id}
+                            pubItem={v}
+                            style={{ marginBottom: '8px' }}
+                            onImageToImage={onImageToImage}
+                          />
+                        ))}
+                      </div>
+                    </>
                   )}
                 </>
               ) : (
@@ -486,7 +511,7 @@ export const DesktopPublishContent = memo(
         </div>
 
         {/* 右侧预览和AI助手（窄屏时） */}
-        <div className="flex relative [&>#publishDialogAi]:absolute [&>#publishDialogAi]:top-0 [&>#publishDialogAi]:h-full [&>#publishDialogAi]:z-20">
+        <div className="relative flex [&>#publishDialogAi]:absolute [&>#publishDialogAi]:left-0 [&>#publishDialogAi]:top-0 [&>#publishDialogAi]:z-20 [&>#publishDialogAi]:h-full [&>#publishDialogAi]:min-w-[400px] [&>#publishDialogAi]:shadow-lg">
           {/* 屏幕宽度不够时，AI助手绝对定位覆盖在预览上方 */}
           {width < aiPanelBreakpoint && (
             <CSSTransition in={openLeftSide} timeout={300} classNames="left" unmountOnExit>

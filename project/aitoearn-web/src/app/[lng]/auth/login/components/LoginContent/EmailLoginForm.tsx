@@ -50,6 +50,9 @@ export function EmailLoginForm({
   const searchParams = useSearchParams()
   const redirect = redirectUrl ?? searchParams.get('redirect')
   const { setToken, setUserInfo } = useUserStore()
+  const localAdminToken = process.env.NEXT_PUBLIC_LOCAL_ADMIN_TOKEN || ''
+  const localAdminMail = 'admin@aitoearn.local'
+  const localAdminPassword = 'local-admin'
   const { t, i18n } = useTransClient('login')
   const { countdown, isCounting, start: startCountdown } = useCountdown()
   const [sendingCode, setSendingCode] = useState(false)
@@ -78,14 +81,18 @@ export function EmailLoginForm({
     () =>
       z.object({
         email: z.string().min(1, t('emailRequired')).email(t('emailInvalid')),
-        code: z.string().min(1, t('emailCodeRequired')).length(6, t('emailCodeLength')),
+        code: localAdminToken
+          ? z.string().min(1, t('emailCodeRequired'))
+          : z.string().min(1, t('emailCodeRequired')).length(6, t('emailCodeLength')),
       }),
     [t],
   )
 
   const form = useForm<EmailLoginFormData>({
     resolver: zodResolver(schema),
-    defaultValues: { email: '', code: '' },
+    defaultValues: localAdminToken
+      ? { email: localAdminMail, code: localAdminPassword }
+      : { email: '', code: '' },
   })
 
   /** 发送邮箱验证码 */
@@ -117,6 +124,24 @@ export function EmailLoginForm({
   /** 邮箱验证码登录 */
   const handleSubmit = async (data: EmailLoginFormData) => {
     try {
+      if (localAdminToken && data.email === localAdminMail && data.code === localAdminPassword) {
+        setToken(localAdminToken)
+        setUserInfo({
+          id: '6a30cb236beccccb4c05ad17',
+          _id: '6a30cb236beccccb4c05ad17',
+          name: 'Admin',
+          mail: localAdminMail,
+          status: 1,
+          userType: 'CREATOR' as any,
+        } as any)
+        toast.success(t('loginSuccess'))
+        if (onLoginSuccess)
+          onLoginSuccess()
+        else
+          router.push(redirect || '/')
+        return
+      }
+
       const inviteCode = inviteCodeProp ?? searchParams.get('inviteCode') ?? undefined
       const res = await emailCodeLoginApi({ mail: data.email, code: data.code, inviteCode })
       if (!res)
@@ -232,7 +257,7 @@ export function EmailLoginForm({
               inputMode="numeric"
               maxLength={6}
               autoComplete="off"
-              placeholder={t('enterCode')}
+              placeholder={localAdminToken ? 'Password' : t('enterCode')}
               {...form.register('code')}
               className="h-12 rounded-xl border-input bg-background px-4 text-base placeholder:text-muted-foreground/70 focus:border-ring focus:ring-0"
             />
@@ -245,7 +270,7 @@ export function EmailLoginForm({
           <Button
             type="button"
             variant="outline"
-            disabled={isCounting || sendingCode}
+            disabled={Boolean(localAdminToken) || isCounting || sendingCode}
             onClick={handleSendCode}
             className="h-12 shrink-0 cursor-pointer rounded-xl px-4"
           >

@@ -136,7 +136,7 @@ module.exports = {
   channel: {
     channelDb: {
       uri: `mongodb://${MONGODB_USERNAME}:${encodeURIComponent(MONGODB_PASSWORD)}@${MONGODB_HOST}:${MONGODB_PORT}/?authSource=admin&directConnection=true`,
-      dbName: 'aitoearn_channel',
+      dbName: 'aitoearn',
     },
     moreApi: {
       platApiUri: 'https://platapi.yikart.cn',
@@ -312,3 +312,4 @@ module.exports = {
     },
   }),
 }
+

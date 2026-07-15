@@ -6,12 +6,13 @@
 'use client'
 
 import type { DraftGenerationResponse, DraftGenerationTask } from '@/api/draftGeneration'
-import { AlertCircle, ImageIcon, Loader2, Play } from 'lucide-react'
+import { AlertCircle, ImageIcon, Loader2, Play, RefreshCw, X } from 'lucide-react'
 import Image from 'next/image'
 import { memo } from 'react'
 import { useTransClient } from '@/app/i18n/client'
 import { MorphingIcon } from '@/components/common/MorphingIcon'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { getOssUrl } from '@/utils/oss'
 import styles from './GeneratingCard.module.scss'
@@ -24,6 +25,12 @@ interface GeneratingCardProps {
 interface GeneratingTaskCardProps {
   task: DraftGenerationTask
   onClick: () => void
+  /** Dismiss failed — or cancel stuck generating */
+  onDismiss?: (taskId: string) => void
+  /** Cancel generating task (server mark failed) */
+  onCancel?: (taskId: string) => void
+  /** Retry failed task with same params */
+  onRetry?: (taskId: string) => void
 }
 
 function getResponseObject(task: DraftGenerationTask): DraftGenerationResponse | undefined {
@@ -75,9 +82,7 @@ export function hasDraftGenerationTaskPartialResult(task: DraftGenerationTask) {
   )
 }
 
-export function shouldShowDraftGenerationTaskCard(task: DraftGenerationTask) {
-  return task.status === 'generating' || (task.status === 'failed' && hasDraftGenerationTaskPartialResult(task))
-}
+export { shouldShowDraftGenerationTaskCard } from '../../utils/generationTaskVisibility'
 
 export const GeneratingCard = memo(({ count, onClick }: GeneratingCardProps) => {
   const { t } = useTransClient('brandPromotion')
@@ -106,14 +111,15 @@ export const GeneratingCard = memo(({ count, onClick }: GeneratingCardProps) => 
 
 GeneratingCard.displayName = 'GeneratingCard'
 
-export const GeneratingTaskCard = memo(({ task, onClick }: GeneratingTaskCardProps) => {
+export const GeneratingTaskCard = memo(({ task, onClick, onDismiss, onCancel, onRetry }: GeneratingTaskCardProps) => {
   const { t } = useTransClient('brandPromotion')
   const response = getResponseObject(task)
   const imageUrls = response?.imageUrls?.filter(Boolean) ?? []
   const coverUrl = response?.coverUrl || imageUrls[0]
   const generatedCount = response?.generatedImageCount ?? imageUrls.length
   const requestedCount = response?.requestedImageCount ?? task.request?.imageCount
-  const title = getTaskTitle(task) || t('detail.generatingTaskTitle')
+  const title = getTaskTitle(task)
+    || (task.status === 'failed' ? t('detail.generationFailedTitle') : t('detail.generatingTaskTitle'))
   const description = getTaskDescription(task)
   const topics = getTaskTopics(task)
   const modelName = task.request?.model || task.request?.imageModel
@@ -121,13 +127,25 @@ export const GeneratingTaskCard = memo(({ task, onClick }: GeneratingTaskCardPro
   const isGenerating = task.status === 'generating'
   const showImageGrid = imageUrls.length > 0
   const showVideoCover = !showImageGrid && (coverUrl || response?.videoUrl)
+  const errorText = task.errorMessage?.trim() || t('detail.generationFailedFallback')
+  const progress = response?.progress
+  const progressPercent = typeof progress?.percent === 'number'
+    ? Math.max(0, Math.min(100, Math.round(progress.percent)))
+    : isGenerating ? 8 : isFailed ? 0 : 100
+  const progressStage = progress?.stage
+    || (isGenerating ? t('detail.generatingDraft') : isFailed ? t('detail.taskStatus.failed') : t('detail.taskStatus.success'))
+  // Stuck early (caption pack etc.): surface cancel even while still "generating"
+  const looksStuckEarly = isGenerating && progressPercent > 0 && progressPercent < 8
+  const canCancel = isGenerating && onCancel
+  const canDismiss = isFailed && onDismiss
 
   return (
     <div
       data-testid="draftbox-generating-task-card"
+      data-status={task.status}
       className={cn(
         'mb-4 cursor-pointer overflow-hidden rounded-xl border bg-card transition-all duration-300 hover:border-primary/50',
-        isFailed ? 'border-destructive/30' : 'border-primary/20',
+        isFailed ? 'border-destructive/40' : 'border-primary/20',
       )}
       onClick={onClick}
     >
@@ -180,14 +198,36 @@ export const GeneratingTaskCard = memo(({ task, onClick }: GeneratingTaskCardPro
                   )}
                 </div>
               )
-            : (
-                <div className={cn('flex h-[160px] flex-col items-center justify-center gap-3', styles.generatingCard)}>
-                  <MorphingIcon size={32} />
-                  <span className="text-sm text-muted-foreground">
-                    {t('detail.generatingDraft')}
-                  </span>
-                </div>
-              )}
+            : isFailed
+              ? (
+                  <div className="flex h-[160px] flex-col items-center justify-center gap-2 bg-destructive/5 px-4">
+                    <AlertCircle className="h-8 w-8 text-destructive/80" />
+                    <span className="text-center text-sm font-medium text-destructive">
+                      {t('detail.taskStatus.failed')}
+                    </span>
+                  </div>
+                )
+              : (
+                  <div className={cn('relative flex h-[160px] flex-col items-center justify-center gap-3 px-4', styles.generatingCard)}>
+                    <MorphingIcon size={32} />
+                    <div className="w-full max-w-[180px] space-y-1.5 text-center">
+                      <div className="text-sm font-medium text-foreground tabular-nums">
+                        {progressPercent}
+                        %
+                      </div>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-background/70">
+                        <div
+                          className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out"
+                          style={{ width: `${progressPercent}%` }}
+                          data-testid="draftbox-generation-progress-bar"
+                        />
+                      </div>
+                      <div className="line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+                        {progressStage}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
         <Badge
           variant={isFailed ? 'destructive' : 'outline'}
@@ -199,8 +239,31 @@ export const GeneratingTaskCard = memo(({ task, onClick }: GeneratingTaskCardPro
           {isGenerating
             ? <Loader2 className="h-3 w-3 animate-spin" />
             : <AlertCircle className="h-3 w-3" />}
-          {t(`detail.taskStatus.${task.status}`)}
+          {isGenerating && progressPercent > 0
+            ? `${progressPercent}%`
+            : t(`detail.taskStatus.${task.status}`)}
         </Badge>
+
+        {(canDismiss || canCancel) && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="icon"
+            data-testid={canCancel ? 'draftbox-generation-cancel-btn' : 'draftbox-generation-dismiss-btn'}
+            className="absolute right-2 top-2 h-7 w-7 rounded-full bg-background/90 shadow-sm backdrop-blur-sm"
+            aria-label={canCancel ? 'Cancel generation' : t('detail.dismissFailedTask')}
+            title={canCancel ? (looksStuckEarly ? 'Cancel stuck job' : 'Cancel') : t('detail.dismissFailedTask')}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (canCancel)
+                onCancel!(task.id)
+              else
+                onDismiss?.(task.id)
+            }}
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        )}
       </div>
 
       <div className="space-y-2 p-3">
@@ -220,10 +283,53 @@ export const GeneratingTaskCard = memo(({ task, onClick }: GeneratingTaskCardPro
           </div>
         )}
 
-        {modelName && (
-          <Badge variant="secondary" className="rounded-full text-[11px] font-normal">
-            {modelName}
-          </Badge>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {modelName && (
+            <Badge variant="secondary" className="rounded-full text-[11px] font-normal">
+              {modelName}
+            </Badge>
+          )}
+          {isGenerating && progressStage && (
+            <span className="text-[11px] text-muted-foreground">{progressStage}</span>
+          )}
+        </div>
+
+        {isGenerating && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[10px] tabular-nums text-muted-foreground">
+              <span>xAI job progress</span>
+              <span>
+                {progressPercent}
+                %
+              </span>
+            </div>
+            <div className="h-1 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary/80 transition-[width] duration-500 ease-out"
+                style={{ width: `${Math.max(progressPercent, 4)}%` }}
+              />
+            </div>
+            {looksStuckEarly && (
+              <p className="text-[10px] leading-snug text-amber-600 dark:text-amber-400">
+                Preparing can take ~1 min. If stuck here, cancel and retry.
+              </p>
+            )}
+            {canCancel && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 w-full text-[11px]"
+                data-testid="draftbox-generation-cancel-text-btn"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onCancel!(task.id)
+                }}
+              >
+                Cancel job
+              </Button>
+            )}
+          </div>
         )}
 
         {topics.length > 0 && (
@@ -237,8 +343,44 @@ export const GeneratingTaskCard = memo(({ task, onClick }: GeneratingTaskCardPro
           </div>
         )}
 
-        {isFailed && task.errorMessage && (
-          <p className="line-clamp-2 text-xs text-destructive">{task.errorMessage}</p>
+        {isFailed && (
+          <div className="space-y-2">
+            <p className="line-clamp-3 text-xs leading-relaxed text-destructive" data-testid="draftbox-generation-error">
+              {errorText}
+            </p>
+            <div className="flex gap-2">
+              {onRetry && task.request && (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 flex-1 gap-1.5 text-[12px]"
+                  data-testid="draftbox-generation-retry-btn"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onRetry(task.id)
+                  }}
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Retry
+                </Button>
+              )}
+              {onDismiss && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 flex-1 text-[12px]"
+                  data-testid="draftbox-generation-dismiss-text-btn"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onDismiss(task.id)
+                  }}
+                >
+                  Dismiss
+                </Button>
+              )}
+            </div>
+          </div>
         )}
       </div>
     </div>

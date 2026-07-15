@@ -33,6 +33,7 @@ import { Badge } from '@/components/ui/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Slider } from '@/components/ui/slider'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { SOCIAL_OPS_PILL_CLASS } from '@/lib/socialOps/socialOpsShell'
 import { isChina } from '@/constant'
 import { cn } from '@/lib/utils'
 import { IMAGE_COUNT_LIMITS, ratioToPreviewSize } from '../constants'
@@ -41,6 +42,7 @@ import PlatformSelector from '../PlatformSelector'
 interface ToolBarInlineProps {
   contentType: DraftContentType
   selectedVideoModels: VideoModelType[]
+  modelSelectionMode: 'single' | 'multiple'
   aspectRatio: string
   duration: number
   resolution: string
@@ -66,12 +68,15 @@ interface ToolBarInlineProps {
   isDraftMode: boolean
   hideNonDraftModes?: boolean
   selectedPlatforms: PlatType[]
+  platformPreset?: 'connected' | 'all' | 'custom'
+  connectedPlatformCount?: number
   effectiveLimitsDetailed: EffectiveLimitsDetailed
   disabledPlatforms: Map<PlatType, string[]>
   moreOptionsOpen: boolean
   onDraftModeChange: (isDraft: boolean) => void
   onContentTypeChange: (contentType: DraftContentType) => void
   onVideoModelsChange: (modelTypes: VideoModelType[]) => void
+  onModelSelectionModeChange: (mode: 'single' | 'multiple') => void
   onResolutionChange: (resolution: string) => void
   onAspectRatioChange: (ratio: string) => void
   onDurationChange: (duration: number) => void
@@ -80,17 +85,53 @@ interface ToolBarInlineProps {
   onImageCountChange: (imageCount: number) => void
   onImageSizeChange: (size: string) => void
   onPlatformsChange: (platforms: PlatType[]) => void
+  onPlatformPresetChange?: (preset: 'connected' | 'all' | 'custom') => void
   onMoreOptionsChange: (open: boolean) => void
   onSubmit: () => void
 }
 
-/** 通用 pill 按钮样式 */
-const pillClass
-  = 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-transparent hover:border-border'
+/** Shared with Photo Post / PlatformSelector shell */
+const pillClass = SOCIAL_OPS_PILL_CLASS
 const modelTagClassName
   = 'border-transparent bg-orange-100 px-1.5 py-0.5 text-[10px] font-medium leading-none text-orange-600 dark:bg-orange-950 dark:text-orange-400'
 const modelOptionClassName
   = 'flex w-full gap-2 rounded-lg border px-3 py-2 text-left transition-colors cursor-pointer'
+
+/** Normalize legacy pricing labels until the server build is refreshed. */
+function formatVideoModelTitle(model: VideoModelInfo) {
+  const rawName = model.name || ''
+  const id = rawName.replace(/^grok::/, '')
+  const legacy = !model.description
+    || model.description === 'Direct xAI OAuth account'
+    || model.description === 'Routed through local 9Router integration'
+
+  if (rawName.startsWith('grok::') || model.channel === 'grok') {
+    if (id === 'grok-imagine-video')
+      return 'Grok Imagine Video'
+    if (id.startsWith('grok-imagine-video-1.5'))
+      return 'Grok Imagine Video 1.5'
+    if (id === 'grok-imagine-image')
+      return 'Grok Imagine Image'
+    if (legacy)
+      return id.replace(/^grok-/, 'Grok ').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  }
+
+  if (legacy && (model.channel === '9router' || rawName === 'cx_agy'))
+    return rawName === 'cx_agy' ? '9Router CX Agent' : rawName
+
+  return model.description || rawName
+}
+
+function formatVideoModelTags(model: VideoModelInfo) {
+  if (model.channel === 'grok' || model.name?.startsWith('grok::')) {
+    const hasPool = model.tags.some(tag => /pool/i.test(tag))
+    if (hasPool)
+      return model.tags
+    // Legacy API only returned Grok/OAuth — present as a pool model.
+    return ['Grok', 'Pool', ...model.tags.filter(tag => !/oauth/i.test(tag) && !/^grok$/i.test(tag))]
+  }
+  return model.tags
+}
 
 /** 点击触发 Popover 的 hook */
 function useClickPopover() {
@@ -103,6 +144,7 @@ const ToolBarInline = memo(
   ({
     contentType,
     selectedVideoModels,
+    modelSelectionMode,
     aspectRatio,
     duration,
     resolution,
@@ -128,12 +170,15 @@ const ToolBarInline = memo(
     isDraftMode,
     hideNonDraftModes = false,
     selectedPlatforms,
+    platformPreset = 'connected',
+    connectedPlatformCount = 0,
     effectiveLimitsDetailed,
     disabledPlatforms,
     moreOptionsOpen,
     onDraftModeChange,
     onContentTypeChange,
     onVideoModelsChange,
+    onModelSelectionModeChange,
     onResolutionChange,
     onAspectRatioChange,
     onDurationChange,
@@ -142,6 +187,7 @@ const ToolBarInline = memo(
     onImageCountChange,
     onImageSizeChange,
     onPlatformsChange,
+    onPlatformPresetChange,
     onMoreOptionsChange,
     onSubmit,
   }: ToolBarInlineProps) => {
@@ -192,31 +238,45 @@ const ToolBarInline = memo(
         return { label: t('detail.selectModels'), extraCount: 0 }
 
       const firstLabel = isVideoMode
-        ? videoModelOptions.find(m => m.value === firstValue)?.label || firstValue
+        ? (() => {
+            const fromOptions = videoModelOptions.find(m => m.value === firstValue)?.label
+            const fromModels = videoModels?.find(m => m.name === firstValue)
+            if (fromModels)
+              return formatVideoModelTitle(fromModels)
+            return fromOptions || firstValue
+          })()
         : imageModelOptions.find(m => m.value === firstValue)?.label || firstValue
 
       return { label: firstLabel, extraCount: Math.max(0, selectedValues.length - 1) }
-    }, [imageModelOptions, isVideoMode, selectedImageModels, selectedVideoModels, t, videoModelOptions])
+    }, [imageModelOptions, isVideoMode, selectedImageModels, selectedVideoModels, t, videoModelOptions, videoModels])
 
     const modelOptionsCount = isVideoMode ? (videoModels?.length ?? 0) : imageModelOptions.length
 
     const handleVideoModelToggle = useCallback((modelName: VideoModelType) => {
+      if (modelSelectionMode === 'single') {
+        onVideoModelsChange([modelName])
+        return
+      }
       const isSelected = selectedVideoModels.includes(modelName)
       if (isSelected && selectedVideoModels.length <= 1)
         return
       onVideoModelsChange(isSelected
         ? selectedVideoModels.filter(item => item !== modelName)
         : [...selectedVideoModels, modelName])
-    }, [onVideoModelsChange, selectedVideoModels])
+    }, [modelSelectionMode, onVideoModelsChange, selectedVideoModels])
 
     const handleImageModelToggle = useCallback((modelName: string) => {
+      if (modelSelectionMode === 'single') {
+        onImageModelsChange([modelName])
+        return
+      }
       const isSelected = selectedImageModels.includes(modelName)
       if (isSelected && selectedImageModels.length <= 1)
         return
       onImageModelsChange(isSelected
         ? selectedImageModels.filter(item => item !== modelName)
         : [...selectedImageModels, modelName])
-    }, [onImageModelsChange, selectedImageModels])
+    }, [modelSelectionMode, onImageModelsChange, selectedImageModels])
 
     const handleDurationChange = useCallback(
       ([val]: number[]) => {
@@ -367,16 +427,17 @@ const ToolBarInline = memo(
           </PopoverContent>
         </Popover>
 
-        {/* 平台选择 pill（内含参数限制 ⓘ）— 仅草稿模式显示 */}
-        {isDraftMode && (
-          <PlatformSelector
-            selectedPlatforms={selectedPlatforms}
-            onPlatformsChange={onPlatformsChange}
-            pillClass={pillClass}
-            disabledPlatforms={disabledPlatforms}
-            effectiveLimitsDetailed={effectiveLimitsDetailed}
-          />
-        )}
+        {/* Target platforms — always available for publish targeting limits */}
+        <PlatformSelector
+          selectedPlatforms={selectedPlatforms}
+          onPlatformsChange={onPlatformsChange}
+          pillClass={pillClass}
+          disabledPlatforms={disabledPlatforms}
+          effectiveLimitsDetailed={effectiveLimitsDetailed}
+          platformPreset={platformPreset}
+          onPlatformPresetChange={onPlatformPresetChange}
+          connectedCount={connectedPlatformCount}
+        />
 
         {/* 模型选择 pill */}
         <Popover open={modelPopover.open} onOpenChange={modelPopover.onOpenChange}>
@@ -402,16 +463,35 @@ const ToolBarInline = memo(
             align="start"
             allowInnerScroll
           >
-            <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
-              <span className="text-xs font-medium text-foreground">
-                {isVideoMode ? t('detail.modelType') : t('detail.imageModel')}
-              </span>
-              <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                {t('detail.selectedModelsCount', {
-                  selected: selectedModelValues.length,
-                  total: modelOptionsCount,
-                })}
-              </span>
+            <div className="border-b border-border px-3 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-medium text-foreground">
+                  {isVideoMode ? t('detail.modelType') : t('detail.imageModel')}
+                </span>
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                  {t('detail.selectedModelsCount', {
+                    selected: selectedModelValues.length,
+                    total: modelOptionsCount,
+                  })}
+                </span>
+              </div>
+              <div className="mt-2 grid grid-cols-2 rounded-md bg-muted p-0.5">
+                {(['single', 'multiple'] as const).map(mode => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={cn(
+                      'rounded px-2 py-1 text-[11px] font-medium transition-colors',
+                      modelSelectionMode === mode
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                    onClick={() => onModelSelectionModeChange(mode)}
+                  >
+                    {mode === 'single' ? 'Single' : 'Multiple'}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="max-h-[min(50vh,360px)] overflow-y-auto p-2">
               <div className="flex flex-col gap-1">
@@ -452,6 +532,9 @@ const ToolBarInline = memo(
                             : ''
                       const resolutionLabel = defaultResolution ?? ''
 
+                      const title = formatVideoModelTitle(model)
+                      const tags = formatVideoModelTags(model)
+
                       return (
                         <button
                           key={key}
@@ -474,15 +557,31 @@ const ToolBarInline = memo(
                                   isActive ? 'font-medium text-foreground' : 'text-foreground',
                                 )}
                               >
-                                {model.description || model.name}
+                                {title}
                               </span>
-                              {model.tags.map(tag => (
-                                <Badge key={tag} className={modelTagClassName}>
+                              {tags.map(tag => (
+                                <Badge
+                                  key={tag}
+                                  className={cn(
+                                    modelTagClassName,
+                                    /pool/i.test(tag) && 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300',
+                                    /super/i.test(tag) && 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300',
+                                    /seat/i.test(tag) && 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+                                  )}
+                                >
                                   {tag}
                                 </Badge>
                               ))}
                             </div>
                             <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-muted-foreground">
+                              {(model.channel === 'grok' || model.name?.startsWith('grok::')) && (
+                                <>
+                                  <span>Auto-balance pool</span>
+                                  <span>·</span>
+                                  <span className="font-mono opacity-80">{key.replace(/^grok::/, '')}</span>
+                                  <span>·</span>
+                                </>
+                              )}
                               {resolutionLabel && <span>{resolutionLabel}</span>}
                               {resolutionLabel && durationRange && <span>·</span>}
                               {durationRange && <span>{durationRange}</span>}

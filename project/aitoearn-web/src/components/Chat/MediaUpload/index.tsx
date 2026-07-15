@@ -101,7 +101,7 @@ export function MediaUpload({
       if (media.file) {
         return URL.createObjectURL(media.file)
       }
-      return getOssUrl(media.url)
+      return media.url ? getOssUrl(media.url) : ''
     })
   }, [medias])
 
@@ -402,3 +402,4 @@ export function MediaUpload({
 }
 
 export default MediaUpload
+

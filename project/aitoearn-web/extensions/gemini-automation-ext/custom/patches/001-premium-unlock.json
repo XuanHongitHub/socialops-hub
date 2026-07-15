@@ -1,0 +1,64 @@
+{
+  "id": "premium-unlock",
+  "description": "Force Max/Premium default, remove free daily limit, bypass auth plan API.",
+  "enabled": true,
+  "targetGlobs": ["assets/index.html-*.js"],
+  "replacements": [
+    {
+      "id": "default-premium-state",
+      "find": "Od=Qo(\"\"),_d=Qo(!1),Pd=Qo(!1),Ad=Qo(!1),Ld=Qo(\"\")",
+      "replace": "Od=Qo(\"premium@unlocked\"),_d=Qo(!0),Pd=Qo(!0),Ad=Qo(!1),Ld=Qo(\"\")",
+      "required": true
+    },
+    {
+      "id": "rd-always-pro",
+      "find": "async function Rd(e){const t=await fetch(`${Sd}/api/auth/plan`,{headers:{Authorization:`Bearer ${e}`}});if(!t.ok)return Dd(),Pd.value=!1,_d.value=!1,void(Ld.value=401===t.status?\"Session expired. Please sign in again.\":\"\");const n=await t.json();_d.value=!!n.active,Pd.value=!0}",
+      "replace": "async function Rd(e){_d.value=!0,Pd.value=!0,Ld.value=\"\"}",
+      "required": true
+    },
+    {
+      "id": "md-always-pro",
+      "find": "async function Md(e){Ad.value=!0,Ld.value=\"\";try{const t=await fetch(`${Sd}/api/auth/login`,{method:\"POST\",headers:{\"Content-Type\":\"application/json\"},body:JSON.stringify({email:e})});if(!t.ok)throw new Error(\"Login failed\");const{accessToken:n}=await t.json(),o=await fetch(`${Sd}/api/auth/plan`,{headers:{Authorization:`Bearer ${n}`}});if(!o.ok)throw new Error(\"Could not verify plan\");const r=await o.json();Od.value=e,_d.value=!!r.active,Pd.value=!0,\"undefined\"!=typeof chrome&&chrome?.storage?.local&&chrome.storage.local.set({[Ed]:n,[Id]:e})}catch{Ld.value=\"Could not verify email. Please try again.\",Pd.value=!1,_d.value=!1}finally{Ad.value=!1}}",
+      "replace": "async function Md(e){Ad.value=!0,Ld.value=\"\";try{Od.value=e||\"premium@unlocked\",_d.value=!0,Pd.value=!0,\"undefined\"!=typeof chrome&&chrome?.storage?.local&&chrome.storage.local.set({[Ed]:\"unlocked\",[Id]:Od.value})}catch{Ld.value=\"\",Pd.value=!0,_d.value=!0}finally{Ad.value=!1}}",
+      "required": true
+    },
+    {
+      "id": "logout-keeps-premium",
+      "find": "function Bd(){Od.value=\"\",_d.value=!1,Pd.value=!1,Ld.value=\"\",Dd()}",
+      "replace": "function Bd(){Od.value=\"premium@unlocked\",_d.value=!0,Pd.value=!0,Ld.value=\"\",Dd()}",
+      "required": true
+    },
+    {
+      "id": "storage-load-force-pro",
+      "find": "\"undefined\"!=typeof chrome&&chrome?.storage?.local&&chrome.storage.local.get([Ed,Id],async e=>{const t=e[Ed],n=e[Id];t&&n&&(Od.value=n,await Rd(t))})",
+      "replace": "\"undefined\"!=typeof chrome&&chrome?.storage?.local&&chrome.storage.local.get([Ed,Id],async e=>{const t=e[Ed],n=e[Id];n&&(Od.value=n),_d.value=!0,Pd.value=!0,t&&await Rd(t)})",
+      "required": true
+    },
+    {
+      "id": "daily-limit-unlimited",
+      "find": "function Jd(){const e=Bs(()=>Math.min(Xd.value/10*100,100)),t=Bs(()=>Xd.value>=10);return{usedToday:Xd,percentage:e,isExceeded:t,limit:10}}",
+      "replace": "function Jd(){const e=Bs(()=>0),t=Bs(()=>!1);return{usedToday:Xd,percentage:e,isExceeded:t,limit:999999}}",
+      "required": true
+    },
+    {
+      "id": "is-limit-reached-always-false",
+      "find": "return{isLimitReached:Bs(()=>{if(!s.value)return!1;if(t.value)return!1;const n=10-i.value;return e?n-e.value<0:n<=0}),openUpgrade:async()=>{if(!n.value)return void a();if(await r(),t.value)return;const e=o.value?`${ku}?email=${encodeURIComponent(o.value)}`:ku;\"undefined\"!=typeof chrome&&chrome?.tabs?.create?chrome.tabs.create({url:e}):window.open(e,\"_blank\")}}",
+      "replace": "return{isLimitReached:Bs(()=>!1),openUpgrade:async()=>{return}}",
+      "required": true
+    }
+  ],
+  "regexReplacements": [
+    {
+      "id": "fallback-limit-reached",
+      "pattern": "isLimitReached:Bs\\(\\(\\)=>\\{if\\(!s\\.value\\)return!1;if\\(t\\.value\\)return!1;const n=\\d+-i\\.value;return e\\?n-e\\.value<0:n<=0\\}\\)",
+      "replace": "isLimitReached:Bs(()=>!1)",
+      "required": false
+    },
+    {
+      "id": "fallback-daily-tu",
+      "pattern": "function Jd\\(\\)\\{const e=Bs\\(\\(\\)=>Math\\.min\\(Xd\\.value/\\d+\\*100,100\\)\\),t=Bs\\(\\(\\)=>Xd\\.value>=\\d+\\);return\\{usedToday:Xd,percentage:e,isExceeded:t,limit:\\d+\\}\\}",
+      "replace": "function Jd(){const e=Bs(()=>0),t=Bs(()=>!1);return{usedToday:Xd,percentage:e,isExceeded:t,limit:999999}}",
+      "required": false
+    }
+  ]
+}

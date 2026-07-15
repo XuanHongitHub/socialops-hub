@@ -21,6 +21,7 @@ import { useCalendarTiming } from '@/app/[lng]/accounts/components/CalendarTimin
 import { AccountStatus } from '@/app/config/accountConfig'
 import { AccountPlatInfoMap, PlatType } from '@/app/config/platConfig'
 import { PubType } from '@/app/config/publishConfig'
+import { getPreferredContentCategory } from '@/components/PublishDialog/publishChannelPrefs'
 import { usePublishDialogStorageStore } from '@/components/PublishDialog/usePublishDialogStorageStore'
 import { toast } from '@/lib/toast'
 import { PlatformTaskStatus, PLUGIN_SUPPORTED_PLATFORMS, usePluginStore } from '@/store/plugin'
@@ -55,29 +56,17 @@ export function isPluginSupportedPlatform(platType: PlatType | string): boolean 
 function normalizePublishOption(item: PubItem) {
   const option = lodash.cloneDeep(item.params.option)
 
-  if (item.account.type === PlatType.Instagram && item.params.video) {
+  // Remembered channel prefs (default Post for BugSell) — not force Reels for every video
+  if (item.account.type === PlatType.Instagram && !option.instagram?.content_category) {
     option.instagram = {
       ...option.instagram,
-      content_category: 'reel',
+      content_category: getPreferredContentCategory('instagram', Boolean(item.params.video)),
     }
   }
-  else if (item.account.type === PlatType.Instagram && !option.instagram?.content_category) {
-    option.instagram = {
-      ...option.instagram,
-      content_category: 'post',
-    }
-  }
-
-  if (item.account.type === PlatType.Facebook && item.params.video) {
+  if (item.account.type === PlatType.Facebook && !option.facebook?.content_category) {
     option.facebook = {
       ...option.facebook,
-      content_category: 'reel',
-    }
-  }
-  else if (item.account.type === PlatType.Facebook && !option.facebook?.content_category) {
-    option.facebook = {
-      ...option.facebook,
-      content_category: 'post',
+      content_category: getPreferredContentCategory('facebook', Boolean(item.params.video)),
     }
   }
 

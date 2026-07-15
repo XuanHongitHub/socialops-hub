@@ -5,11 +5,13 @@
 
 'use client'
 
+import type { ChatModel } from '@/api/types/ai'
 import Image from 'next/image'
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
+import { getChatModels } from '@/api/ai'
 import { AccountPlatInfoArr } from '@/app/config/platConfig'
 import { useTransClient } from '@/app/i18n/client'
 import { useChannelManagerStore } from '@/components/ChannelManager'
@@ -61,6 +63,16 @@ export const HomeChat = forwardRef<IHomeChatRef, IHomeChatProps>(
 
     // 状态 - 初始为空，使用 placeholder 显示提示文本
     const [inputValue, setInputValue] = useState('')
+    const [chatModels, setChatModels] = useState<ChatModel[]>([])
+    const [selectedModel, setSelectedModel] = useState(() => typeof window === 'undefined' ? 'cx_agy' : localStorage.getItem('socialops_chat_model') || 'cx_agy')
+
+    useEffect(() => {
+      getChatModels('web', true).then((res) => {
+        const models = res?.data || []
+        setChatModels(models)
+        if (!models.some(model => model.name === selectedModel) && models[0]) setSelectedModel(models[0].name)
+      }).catch(() => null)
+    }, [])
 
     // 当外部提示词或 agentTaskId 变化时更新输入框
     useEffect(() => {
@@ -238,11 +250,12 @@ export const HomeChat = forwardRef<IHomeChatRef, IHomeChatProps>(
       setPendingTask({
         prompt: currentPrompt,
         medias: currentMedias,
+        model: selectedModel,
       })
 
       // 立即跳转到聊天页面（使用 "new" 作为临时 taskId）
       router.push(`/chat/new`)
-    }, [inputValue, medias, router, lng, setPendingTask])
+    }, [inputValue, medias, router, lng, setPendingTask, selectedModel])
 
     /** 处理发送消息 */
     const handleSend = useCallback(async () => {
@@ -282,6 +295,9 @@ export const HomeChat = forwardRef<IHomeChatRef, IHomeChatProps>(
           placeholder={defaultPrompt}
           mode="large"
           allowEmptySubmit
+          models={chatModels}
+          selectedModel={selectedModel}
+          onModelChange={(model) => { setSelectedModel(model); localStorage.setItem('socialops_chat_model', model) }}
         />
 
         {/* 平台工具链接提示 */}

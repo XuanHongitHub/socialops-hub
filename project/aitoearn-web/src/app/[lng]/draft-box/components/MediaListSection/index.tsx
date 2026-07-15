@@ -21,6 +21,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { confirm } from '@/lib/confirm'
 import { toast } from '@/lib/toast'
 import { getOssUrl } from '@/utils/oss'
+import {
+  SOCIAL_OPS_EMPTY_DESC_CLASS,
+  SOCIAL_OPS_EMPTY_ICON_CLASS,
+  SOCIAL_OPS_EMPTY_TITLE_CLASS,
+  SOCIAL_OPS_EMPTY_WRAP_CLASS,
+} from '@/lib/socialOps/socialOpsShell'
 import { useDraftReferenceMaxImages } from '../../hooks/useDraftReferenceMaxImages'
 import { useTransferDraftDialogStore } from '../../transferDraftDialogStore'
 import { useMediaTabStore } from '../ContentTabs/mediaTabStore'
@@ -80,6 +86,9 @@ export const MediaListSection = memo(({ type, materialGroupId, showBatchDeleteTr
   const draftReferenceMaxImages = useDraftReferenceMaxImages(materialGroupId)
   const generationTasks = usePlanDetailStore(state => state.generationTasks)
   const openGenerationDetailDialog = usePlanDetailStore(state => state.openGenerationDetailDialog)
+  const dismissGenerationTasks = usePlanDetailStore(state => state.dismissGenerationTasks)
+  const cancelGenerationTask = usePlanDetailStore(state => state.cancelGenerationTask)
+  const retryGenerationTask = usePlanDetailStore(state => state.retryGenerationTask)
 
   const { list, loading, hasMore, initialized, total } = useMediaTabStore(
     useShallow(state => ({
@@ -242,18 +251,18 @@ export const MediaListSection = memo(({ type, materialGroupId, showBatchDeleteTr
     )
   }
 
-  // 空状态
+  // 空状态 — shared SocialOps empty shell
   if (initialized && list.length === 0 && visibleGenerationTasks.length === 0) {
     const Icon = type === 'video' ? Video : ImageIcon
     return (
-      <div className="flex flex-col items-center justify-center py-12">
-        <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-          <Icon className="w-8 h-8 text-muted-foreground" />
+      <div className={SOCIAL_OPS_EMPTY_WRAP_CLASS} data-testid={`media-empty-${type}`}>
+        <div className={SOCIAL_OPS_EMPTY_ICON_CLASS}>
+          <Icon className="h-7 w-7" />
         </div>
-        <p className="text-sm font-medium text-foreground mb-1">
+        <p className={SOCIAL_OPS_EMPTY_TITLE_CLASS}>
           {type === 'video' ? t('mediaManagement.noVideo') : t('mediaManagement.noImage')}
         </p>
-        <p className="text-sm text-muted-foreground">
+        <p className={SOCIAL_OPS_EMPTY_DESC_CLASS}>
           {type === 'video' ? t('mediaManagement.noVideoDesc') : t('mediaManagement.noImageDesc')}
         </p>
       </div>
@@ -323,7 +332,14 @@ export const MediaListSection = memo(({ type, materialGroupId, showBatchDeleteTr
         columnClassName="pl-4 bg-clip-padding"
       >
         {!batchMode && visibleGenerationTasks.map(task => (
-          <GeneratingTaskCard key={task.id} task={task} onClick={openGenerationDetailDialog} />
+          <GeneratingTaskCard
+            key={task.id}
+            task={task}
+            onClick={openGenerationDetailDialog}
+            onDismiss={id => dismissGenerationTasks([id])}
+            onCancel={id => void cancelGenerationTask(id)}
+            onRetry={id => void retryGenerationTask(id)}
+          />
         ))}
         {list.map(media => (
           <MediaCard

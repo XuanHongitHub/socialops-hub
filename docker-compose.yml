@@ -112,7 +112,7 @@ services:
 
   aitoearn-ai:
     image: aitoearn/aitoearn-ai:latest
-    pull_policy: always
+    pull_policy: never
     container_name: aitoearn-ai
     restart: unless-stopped
     depends_on:
@@ -121,7 +121,8 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./project/aitoearn-backend/apps/aitoearn-ai/config/config.js:/app/config.js:ro
+      - ./project/aitoearn-backend/apps/aitoearn-ai/config/config.yaml:/app/config.yaml:rw
+      - ./.social-assets:/app/social-artifacts:rw
     networks:
       - aitoearn-network
     environment:
@@ -146,8 +147,8 @@ services:
       ASSETS_CONFIG: '{"provider":"s3","region":"us-east-1","bucketName":"aitoearn","endpoint":"http://rustfs.local:9000","publicEndpoint":"http://localhost:9000","cdnEndpoint":"http://localhost:8080/oss","accessKeyId":"rustfsadmin","secretAccessKey":"rustfsadmin","forcePathStyle":true}'
 
       # AI Services
-      OPENAI_API_KEY: sk-placeholder
-      OPENAI_BASE_URL: https://api.openai.com/v1
+      OPENAI_API_KEY: sk-cea7f6fabed1147d-ach9kn-b7ba8b04
+      OPENAI_BASE_URL: http://host.docker.internal:20128/v1
       ANTHROPIC_API_KEY: sk-placeholder
       ANTHROPIC_BASE_URL: https://api.anthropic.com
       VOLCENGINE_API_KEY: ""
@@ -168,7 +169,7 @@ services:
 
   aitoearn-server:
     image: aitoearn/aitoearn-server:latest
-    pull_policy: always
+    pull_policy: never
     container_name: aitoearn-server
     restart: unless-stopped
     depends_on:
@@ -179,14 +180,16 @@ services:
       aitoearn-ai:
         condition: service_healthy
     volumes:
-      - ./project/aitoearn-backend/apps/aitoearn-server/config/config.js:/app/config.js:ro
+      - ./project/aitoearn-backend/apps/aitoearn-server/config/config.yaml:/app/config.yaml:rw
+    env_file:
+      - .env.local
     networks:
       - aitoearn-network
     environment:
       NODE_ENV: production
       APP_ENV: production
       APP_NAME: aitoearn-server
-      APP_DOMAIN: localhost
+      APP_DOMAIN: ${APP_DOMAIN:-localhost}
 
       MONGODB_HOST: mongodb
       MONGODB_PORT: 27017
@@ -220,13 +223,13 @@ services:
       TIKTOK_CLIENT_SECRET: ""
       TWITTER_CLIENT_ID: ""
       TWITTER_CLIENT_SECRET: ""
-      FACEBOOK_CLIENT_ID: ""
-      FACEBOOK_CLIENT_SECRET: ""
-      FACEBOOK_CONFIG_ID: ""
+      FACEBOOK_CLIENT_ID: ${FACEBOOK_CLIENT_ID:-}
+      FACEBOOK_CLIENT_SECRET: ${FACEBOOK_CLIENT_SECRET:-}
+      FACEBOOK_CONFIG_ID: ${FACEBOOK_CONFIG_ID:-}
       THREADS_CLIENT_ID: ""
       THREADS_CLIENT_SECRET: ""
-      INSTAGRAM_CLIENT_ID: ""
-      INSTAGRAM_CLIENT_SECRET: ""
+      INSTAGRAM_CLIENT_ID: ${INSTAGRAM_CLIENT_ID:-}
+      INSTAGRAM_CLIENT_SECRET: ${INSTAGRAM_CLIENT_SECRET:-}
       LINKEDIN_CLIENT_ID: ""
       LINKEDIN_CLIENT_SECRET: ""
       YOUTUBE_CLIENT_ID: ""
@@ -256,7 +259,7 @@ services:
 
   aitoearn-web:
     image: aitoearn/aitoearn-web:latest
-    pull_policy: always
+    pull_policy: never
     container_name: aitoearn-web
     restart: unless-stopped
     depends_on:

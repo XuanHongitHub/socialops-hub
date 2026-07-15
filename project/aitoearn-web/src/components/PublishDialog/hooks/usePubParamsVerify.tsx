@@ -119,7 +119,10 @@ function isVideoDurationOutOfRange(
   maxDuration: number,
   minDuration = 0,
 ) {
-  return Boolean(video && (video.duration > maxDuration || video.duration < minDuration))
+  // duration=0 means metadata not probed yet (remote draft URL) — skip hard fail
+  if (!video || !Number.isFinite(video.duration) || video.duration <= 0)
+    return false
+  return video.duration > maxDuration || video.duration < minDuration
 }
 
 function isTikTokImageFormatSupported(img: IImgFile) {
@@ -436,9 +439,14 @@ export default function usePubParamsVerify(data: PubItem[]) {
             )) {
               addErrorMsg(t('validation.instagramReelDuration'))
             }
-            // instagram reel 视频宽高比限制：4:5 ~ 9:16 (0.8 ~ 0.5625)
-            if (video && !isAspectRatioInRange(video.width, video.height, 9 / 16, 4 / 5)) {
-              addErrorMsg(t('validation.instagramReelAspectRatio'))
+            // Instagram Reel 宽高比 4:5 ~ 9:16 (w/h). Skip unknown dims; allow encoder slack.
+            if (video && video.width > 0 && video.height > 0) {
+              const r = video.width / video.height
+              // Portrait social band (~9:16–4:5) with slack for Grok encoder rounding
+              const ok = r >= 0.5 && r <= 0.86
+              if (!ok && !isAspectRatioInRange(video.width, video.height, 9 / 16, 4 / 5, 0.06)) {
+                addErrorMsg(t('validation.instagramReelAspectRatio'))
+              }
             }
             break
           case 'story':
@@ -553,9 +561,15 @@ export default function usePubParamsVerify(data: PubItem[]) {
           addErrorMsg(t('validation.tiktokImageSize'))
         }
         // TikTok 图片最小高度和宽度为 360 像素
+        // width/height 0 = metadata not probed yet (draft remote URL) — skip hard fail
+        // (ensurePublishReady stamps safe dims; do not false-block product photos)
         if (v.params.images) {
           for (const img of v.params.images) {
-            if (img.width < 360 || img.height < 360) {
+            const w = Number(img.width) || 0
+            const h = Number(img.height) || 0
+            if (w <= 0 || h <= 0)
+              continue
+            if (w < 360 || h < 360) {
               addErrorMsg(t('validation.tiktokImageMinResolution'))
               break
             }
@@ -639,14 +653,18 @@ export default function usePubParamsVerify(data: PubItem[]) {
 
       // YouTube 警告消息
       if (v.account.type === PlatType.YouTube) {
-        // 建议分辨率：1920×1080（16:9）或 1080×1920（9:16）。
+        // 建议 16:9 或 9:16 — portrait social (h>w) near 9:16 is fine; skip unknown dims
         if (v.params.video) {
           const video = v.params.video
-          if (
-            !isAspectRatioMatch(video.width, video.height, 16 / 9)
-            && !isAspectRatioMatch(video.width, video.height, 9 / 16)
-          ) {
-            addWarningMsg(t('validation.youtubeResolutionSuggestion'))
+          if (video.width > 0 && video.height > 0) {
+            const r = video.width / video.height
+            const isPortraitSocial = r >= 0.5 && r <= 0.65 // ~9:16 band
+            const isLandscape169 = Math.abs(r - 16 / 9) <= 0.06
+            if (!isPortraitSocial && !isLandscape169
+              && !isAspectRatioMatch(video.width, video.height, 16 / 9, 0.06)
+              && !isAspectRatioMatch(video.width, video.height, 9 / 16, 0.06)) {
+              addWarningMsg(t('validation.youtubeResolutionSuggestion'))
+            }
           }
         }
       }

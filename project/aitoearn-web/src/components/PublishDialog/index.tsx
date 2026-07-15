@@ -39,6 +39,7 @@ import { useValidatedPublishTrigger } from '@/components/PublishDialog/hooks/use
 import { debugPublishDialog } from '@/components/PublishDialog/PublishDialog.util'
 import { usePublishDialog } from '@/components/PublishDialog/usePublishDialog'
 import { usePublishDialogStorageStore } from '@/components/PublishDialog/usePublishDialogStorageStore'
+import { ensurePinterestBoards } from '@/components/PublishDialog/ensurePublishReady'
 import { Modal } from '@/components/ui/modal'
 import { useIsMobile } from '@/hooks/useIsMobile'
 
@@ -194,6 +195,7 @@ const PublishDialog = memo(
       const isInit = useRef(false)
       const hasInitRef = useRef(false)
       const previousOpenRef = useRef(open)
+      const pinterestBoardInitRef = useRef('')
       const dialogLoading = accountListInitialLoading || prefillLoading
 
       // ============ Custom Hooks ============
@@ -272,6 +274,23 @@ const PublishDialog = memo(
         }
       }, [open, _hasHydrated, restorePubData])
 
+      useEffect(() => {
+        if (!open)
+          return
+        const missingBoardIds = pubListChoosed
+          .filter(item => item.account.type === 'pinterest' && !item.params.option?.pinterest?.boardId)
+          .map(item => item.account.id)
+          .sort()
+        if (missingBoardIds.length === 0) {
+          pinterestBoardInitRef.current = ''
+          return
+        }
+        const signature = missingBoardIds.join(',')
+        if (pinterestBoardInitRef.current === signature)
+          return
+        pinterestBoardInitRef.current = signature
+        void ensurePinterestBoards(pubListChoosed, setOnePubParams)
+      }, [open, pubListChoosed, setOnePubParams])
       // 实时保存数据
       useEffect(() => {
         if (!open)

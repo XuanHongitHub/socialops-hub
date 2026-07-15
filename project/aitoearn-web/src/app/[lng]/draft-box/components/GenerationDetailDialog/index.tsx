@@ -6,7 +6,7 @@
 'use client'
 
 import type { DraftGenerationResponse, DraftGenerationTask } from '@/api/draftGeneration'
-import { AlertCircle, CheckCircle2, Loader2, Play } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Loader2, Play, RefreshCw, X } from 'lucide-react'
 import Image from 'next/image'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
@@ -15,6 +15,7 @@ import { usePlanDetailStore } from '@/app/[lng]/brand-promotion/planDetailStore'
 import { useTransClient } from '@/app/i18n/client'
 import { MediaPreview } from '@/components/common/MediaPreview'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -96,15 +97,37 @@ const TaskItem = memo(({
   t,
   applyTargetGroupId,
   onApplied,
+  onRetry,
+  onDismiss,
+  onCancel,
+  retrying,
+  cancelling,
 }: {
   task: DraftGenerationTask
   t: (key: string, options?: Record<string, unknown>) => string
   applyTargetGroupId?: string | null
   onApplied?: () => void
+  onRetry?: (task: DraftGenerationTask) => void
+  onDismiss?: (taskId: string) => void
+  onCancel?: (taskId: string) => void
+  retrying?: boolean
+  cancelling?: boolean
 }) => {
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewIndex, setPreviewIndex] = useState(0)
   const response = getTaskResponse(task)
+  // Normalize status — API may send mixed case
+  const status = String(task.status || '').toLowerCase() as DraftGenerationTask['status']
+  const isFailed = status === 'failed'
+  const isGenerating = status === 'generating'
+  // Always allow retry UI for failed tasks when handler exists; store validates request.
+  const showFailedActions = isFailed && Boolean(onRetry || onDismiss)
+  const canRetry = isFailed && Boolean(onRetry) && Boolean(task.request && (task.request.model || task.request.imageModel || task.request.prompt))
+  const canCancel = isGenerating && Boolean(onCancel)
+  const progressStage = response?.progress?.stage
+  const progressPercent = typeof response?.progress?.percent === 'number'
+    ? Math.max(0, Math.min(100, Math.round(response.progress.percent)))
+    : undefined
 
   // 构建预览项列表和封面
   const hasVideo = !!response?.videoUrl
@@ -125,15 +148,73 @@ const TaskItem = memo(({
       : (response.imageUrls || []).map(url => ({ type: 'image' as const, src: getOssUrl(url), title }))
     : []
 
+  const failedActions = showFailedActions
+    ? (
+        <div
+          className="mt-2 flex flex-wrap items-center gap-2"
+          data-testid="draftbox-generation-detail-failed-actions"
+        >
+          {canRetry && (
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 min-w-[5.5rem] gap-1.5 text-[12px] font-medium"
+              data-testid="draftbox-generation-detail-retry-btn"
+              disabled={retrying}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                onRetry?.(task)
+              }}
+            >
+              {retrying
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <RefreshCw className="h-3.5 w-3.5" />}
+              Retry
+            </Button>
+          )}
+          {onDismiss && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 text-[12px]"
+              data-testid="draftbox-generation-detail-dismiss-btn"
+              disabled={retrying}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                onDismiss(task.id)
+              }}
+            >
+              Dismiss
+            </Button>
+          )}
+          {!canRetry && onRetry && (
+            <span className="text-[11px] text-muted-foreground">
+              Missing params — use “Use This Setup” above
+            </span>
+          )}
+        </div>
+      )
+    : null
+
   return (
-    <div className="flex items-start gap-3 p-3 rounded-lg border border-border/50 bg-muted/20">
+    <div
+      className={cn(
+        'flex items-start gap-3 p-3 rounded-lg border bg-muted/20',
+        isFailed ? 'border-destructive/40' : 'border-border/50',
+      )}
+      data-testid="draftbox-generation-detail-task"
+      data-status={status}
+    >
       <div className="mt-0.5">
-        <StatusIcon status={task.status} />
+        <StatusIcon status={status === 'generating' || status === 'success' || status === 'failed' ? status : task.status} />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <Badge variant={getStatusVariant(task.status)} className={cn('text-xs', getStatusClassName(task.status))}>
-            {t(`detail.taskStatus.${task.status}`)}
+          <Badge variant={getStatusVariant(status === 'generating' || status === 'success' || status === 'failed' ? status : task.status)} className={cn('text-xs', getStatusClassName(status === 'generating' || status === 'success' || status === 'failed' ? status : task.status))}>
+            {t(`detail.taskStatus.${status === 'generating' || status === 'success' || status === 'failed' ? status : task.status}`)}
           </Badge>
           {task.points > 0 && (
             <span className="text-xs text-muted-foreground">
@@ -141,6 +222,39 @@ const TaskItem = memo(({
             </span>
           )}
         </div>
+
+        {/* Retry/Dismiss right under Failed badge — always visible without scroll past params */}
+        {failedActions}
+
+        {/* Cancel generating (browser bridge / API jobs stuck in queue) */}
+        {canCancel && (
+          <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="draftbox-generation-detail-cancel-actions">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 min-w-[5.5rem] gap-1.5 text-[12px] font-medium"
+              data-testid="draftbox-generation-detail-cancel-btn"
+              disabled={cancelling}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                onCancel?.(task.id)
+              }}
+            >
+              {cancelling
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <X className="h-3.5 w-3.5" />}
+              Cancel
+            </Button>
+            {progressStage && (
+              <span className="text-[11px] text-muted-foreground line-clamp-2">
+                {progressPercent != null ? `${progressPercent}% · ` : ''}
+                {progressStage}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* 请求参数 */}
         {task.request && (
@@ -240,9 +354,12 @@ const TaskItem = memo(({
           </div>
         )}
 
-        {task.errorMessage && task.status === 'failed' && (
-          <p className="text-xs text-destructive mt-1 break-all">{task.errorMessage}</p>
+        {isFailed && task.errorMessage && (
+          <p className="text-xs text-destructive mt-2 break-all" data-testid="draftbox-generation-detail-error">
+            {task.errorMessage}
+          </p>
         )}
+
         <p className="text-xs text-muted-foreground mt-1">
           {formatRelativeTime(new Date(task.createdAt))}
         </p>
@@ -266,9 +383,14 @@ const GenerationDetailContent = memo(({
   const [loading, setLoading] = useState(true)
   const [hasMore, setHasMore] = useState(true)
   const [page, setPage] = useState(1)
+  const [retryingId, setRetryingId] = useState<string | null>(null)
   const loadMoreRef = useRef<HTMLDivElement>(null)
   const pageSize = 20
   const liveGenerationTasks = usePlanDetailStore(state => state.generationTasks)
+  const retryGenerationTask = usePlanDetailStore(state => state.retryGenerationTask)
+  const dismissGenerationTasks = usePlanDetailStore(state => state.dismissGenerationTasks)
+  const cancelGenerationTask = usePlanDetailStore(state => state.cancelGenerationTask)
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
 
   const fetchTasks = useCallback(async (pageNum: number) => {
     setLoading(true)
@@ -298,6 +420,56 @@ const GenerationDetailContent = memo(({
       return
     setTasks(prev => mergeTaskList(prev, liveGenerationTasks))
   }, [liveGenerationTasks])
+
+  const handleRetry = useCallback(async (task: DraftGenerationTask) => {
+    if (!task.request || retryingId)
+      return
+    setRetryingId(task.id)
+    try {
+      const ok = await retryGenerationTask(task.id, task)
+      if (ok) {
+        // Keep history row, but mark as superseded; live queue shows the new generating job.
+        setTasks(prev => prev.filter(item => item.id !== task.id))
+      }
+    }
+    finally {
+      setRetryingId(null)
+    }
+  }, [retryGenerationTask, retryingId])
+
+  const handleDismiss = useCallback((taskId: string) => {
+    dismissGenerationTasks([taskId])
+    setTasks(prev => prev.filter(item => item.id !== taskId))
+  }, [dismissGenerationTasks])
+
+  const handleCancel = useCallback(async (taskId: string) => {
+    if (!taskId || cancellingId)
+      return
+    setCancellingId(taskId)
+    try {
+      await cancelGenerationTask(taskId)
+      // Reflect cancel in history list (server marks failed / Cancelled)
+      setTasks(prev => prev.map(item => item.id === taskId
+        ? {
+            ...item,
+            status: 'failed' as const,
+            errorMessage: 'Cancelled by user',
+            response: {
+              ...(typeof item.response === 'object' ? item.response : {}),
+              progress: {
+                ...((item.response as any)?.progress || {}),
+                stage: 'Cancelled',
+                providerStatus: 'cancelled',
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          }
+        : item))
+    }
+    finally {
+      setCancellingId(null)
+    }
+  }, [cancelGenerationTask, cancellingId])
 
   // IntersectionObserver 无限滚动
   useEffect(() => {
@@ -335,6 +507,11 @@ const GenerationDetailContent = memo(({
               t={t}
               applyTargetGroupId={applyTargetGroupId}
               onApplied={onClose}
+              onCancel={id => void handleCancel(id)}
+              cancelling={cancellingId === task.id}
+              onRetry={String(task.status).toLowerCase() === 'failed' ? handleRetry : undefined}
+              onDismiss={String(task.status).toLowerCase() === 'failed' ? handleDismiss : undefined}
+              retrying={retryingId === task.id}
             />
           ))}
 

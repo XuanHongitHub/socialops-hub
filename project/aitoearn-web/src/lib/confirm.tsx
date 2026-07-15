@@ -27,6 +27,21 @@ function getTranslations() {
   }
 }
 
+function getNodeText(node: React.ReactNode): string {
+  if (typeof node === 'string' || typeof node === 'number')
+    return String(node)
+  if (Array.isArray(node))
+    return node.map(getNodeText).join(' ')
+  if (React.isValidElement(node))
+    return getNodeText((node.props as { children?: React.ReactNode }).children)
+  return ''
+}
+
+function isPlatformRegionRestriction(title: React.ReactNode, content: React.ReactNode): boolean {
+  return getNodeText(title).includes('Platform Region Restriction')
+    || getNodeText(content).includes('only available on the China site')
+}
+
 export interface ConfirmOptions {
   /** 对话框标题 */
   title?: React.ReactNode
@@ -73,6 +88,18 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 }) => {
   const [loading, setLoading] = React.useState(false)
   const translations = getTranslations()
+  const regionRestriction = isPlatformRegionRestriction(title, content)
+
+  React.useEffect(() => {
+    if (!regionRestriction)
+      return
+
+    onCancel?.()
+    onOpenChange(false)
+  }, [regionRestriction, onCancel, onOpenChange])
+
+  if (regionRestriction)
+    return null
 
   // 使用传入的值或翻译的默认值
   const okButtonText = okText ?? translations.ok
@@ -175,6 +202,9 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
  * ```
  */
 export function confirm(options: ConfirmOptions): Promise<boolean> {
+  if (isPlatformRegionRestriction(options.title, options.content))
+    return Promise.resolve(false)
+
   return new Promise((resolve) => {
     const container = document.createElement('div')
     container.id = `confirm-dialog-${Date.now()}`
@@ -232,3 +262,4 @@ export function confirm(options: ConfirmOptions): Promise<boolean> {
 }
 
 export default confirm
+

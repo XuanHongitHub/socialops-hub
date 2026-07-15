@@ -23,7 +23,8 @@ import { isPublicPage } from '@/utils/route'
 
 export function Providers({ children, lng, autoLoginToken }: { children: React.ReactNode, lng: string, autoLoginToken?: string }) {
   const pathname = usePathname()
-  const manualLoginDisabled = Boolean(autoLoginToken)
+  const effectiveAutoLoginToken = autoLoginToken || process.env.NEXT_PUBLIC_LOCAL_ADMIN_TOKEN || ''
+  const manualLoginDisabled = Boolean(effectiveAutoLoginToken)
   const { t, ready: isLoginI18nReady } = useTransClient('login')
   // 用于追踪是否已经在当前路由弹出过登录框，避免重复弹出
   const hasPromptedRef = useRef(false)
@@ -61,14 +62,28 @@ export function Providers({ children, lng, autoLoginToken }: { children: React.R
     const hasQueryToken = new URLSearchParams(window.location.search).has('token')
 
     // 自动登录：无 token 时使用环境变量注入的 token
-    if (!hasQueryToken && !useUserStore.getState().token && autoLoginToken) {
-      useUserStore.getState().setToken(autoLoginToken)
+    if (!hasQueryToken && effectiveAutoLoginToken) {
+      const currentUserStore = useUserStore.getState()
+      if (!currentUserStore.token)
+        currentUserStore.setToken(effectiveAutoLoginToken)
+
+      if (!currentUserStore.userInfo?.name) {
+        currentUserStore.setUserInfo({
+          id: '6a30cb236beccccb4c05ad17',
+          _id: '6a30cb236beccccb4c05ad17',
+          name: 'Admin',
+          mail: 'admin@aitoearn.local',
+          status: 1,
+          userType: 'CREATOR' as any,
+        } as any)
+      }
+
       useLoginDialogStore.getState().closeLoginDialog()
       hasPromptedRef.current = false
     }
 
     useUserStore.getState().appInit()
-  }, [_hasHydrated, autoLoginToken])
+  }, [_hasHydrated, effectiveAutoLoginToken])
 
   useEffect(() => {
     useUserStore.getState().setLang(lng)

@@ -1,0 +1,34 @@
+{
+  "id": "006-product-settings-defaults",
+  "description": "Ship-ready Settings defaults for pure-extension users (no Hub). Concurrent=1, 9:16, 10s, outputs=1, retries=5, download 1080p/1k.",
+  "files": [
+    {
+      "glob": "assets/index.html-*.js",
+      "replacements": [
+        {
+          "comment": "Stock upstream defaults → product defaults (idempotent on already-patched builds)",
+          "find": "L=zo({migrationVersion:5,defaultMode:\"textToVideo\",aspectRatio:\"16:9\",concurrentPrompts:1,outputCount:2,promptDelaySecondsMin:20,promptDelaySecondsMax:30,model:\"Veo 3.1 - Lite\",defaultVideoOption:\"8s\",defaultImageOption:\"new-image\",imageToVideoMaxImagesPerPrompt:1,componentsToVideoMaxImagesPerPrompt:3,imageToImageMaxImagesPerPrompt:3,maxRetries:5,autoDownloadVideoQuality:\"720\",autoDownloadImageQuality:\"1k\"",
+          "replace": "L=zo({migrationVersion:5,defaultMode:\"textToVideo\",aspectRatio:\"9:16\",concurrentPrompts:1,outputCount:1,promptDelaySecondsMin:30,promptDelaySecondsMax:60,model:\"Veo 3.1 - Lite\",defaultVideoOption:\"10s\",defaultImageOption:\"new-image\",imageToVideoMaxImagesPerPrompt:1,componentsToVideoMaxImagesPerPrompt:3,imageToImageMaxImagesPerPrompt:3,maxRetries:5,autoDownloadVideoQuality:\"1080\",autoDownloadImageQuality:\"1k\""
+        },
+        {
+          "comment": "Stable delay even on already product-patched builds (20/30 → 30/60)",
+          "find": "promptDelaySecondsMin:20,promptDelaySecondsMax:30",
+          "replace": "promptDelaySecondsMin:30,promptDelaySecondsMax:60"
+        },
+        {
+          "comment": "If only partial stock values remain (mixed state)",
+          "find": "aspectRatio:\"16:9\",concurrentPrompts:1,outputCount:2",
+          "replace": "aspectRatio:\"9:16\",concurrentPrompts:1,outputCount:1"
+        },
+        {
+          "find": "defaultVideoOption:\"8s\"",
+          "replace": "defaultVideoOption:\"10s\""
+        },
+        {
+          "find": "autoDownloadVideoQuality:\"720\"",
+          "replace": "autoDownloadVideoQuality:\"1080\""
+        }
+      ]
+    }
+  ]
+}

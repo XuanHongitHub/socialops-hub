@@ -17,6 +17,7 @@ RUN apk add --no-cache curl ffmpeg
 WORKDIR /app
 
 COPY assets/ ./
+COPY config.js ./config.js
 COPY --from=deps /app/ ./
 
 COPY apps/ ./apps/

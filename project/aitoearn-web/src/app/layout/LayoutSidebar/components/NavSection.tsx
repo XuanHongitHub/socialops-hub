@@ -145,8 +145,8 @@ function NavItem({ item, currentRoute, collapsed, level = 0 }: NavItemProps) {
 
 export function NavSection({ items, currentRoute, collapsed }: NavSectionProps) {
   // Keys to group into the "More" section
-  // Order: tasksHistory, materialLibrary
-  const groupKeys = ['tasksHistory', 'header.materialLibrary']
+  // Order: tasksHistory, providerConsole, materialLibrary
+  const groupKeys = ['tasksHistory', 'providerConsole', 'header.materialLibrary']
 
   // Main items: only Home and Publish (accounts)
   const mainItems = items.filter(i => !groupKeys.includes(i.translationKey as string))

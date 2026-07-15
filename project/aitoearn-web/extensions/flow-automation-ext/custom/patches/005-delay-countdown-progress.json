@@ -1,0 +1,15 @@
+{
+  "id": "005-delay-countdown-progress",
+  "description": "Broadcast random-delay countdown to side panel so wait time is visible during automation.",
+  "files": [
+    {
+      "glob": "assets/index.ts-*.js",
+      "replacements": [
+        {
+          "find": "u=e.promptDelaySecondsMin??0,l=e.promptDelaySecondsMax??u;if(i>0&&l>0){const t=u>=l?u:u+Math.random()*(l-u);let n=0;for(;n<1e3*t;)if(await z(1e3),n+=1e3,e.isCancelling)return}",
+          "replace": "u=e.promptDelaySecondsMin??0,l=e.promptDelaySecondsMax??u;if(i>0&&l>0){const t=u>=l?u:u+Math.random()*(l-u);let n=0;const _dTotal=Math.max(1,Math.round(t));try{chrome.runtime.sendMessage({type:\"VIDEO_GENERATION_PROGRESS\",data:{groupId:e.groupId,promptIndex:c,percentage:0,status:\"generating\",prompt:`⏳ Random delay ${_dTotal}s (settings ${u}-${l}s)`}}).catch(()=>{})}catch{}for(;n<1e3*t;){if(await z(1e3),n+=1e3,e.isCancelling)return;try{const _left=Math.max(0,Math.round(_dTotal-n/1e3));chrome.runtime.sendMessage({type:\"VIDEO_GENERATION_PROGRESS\",data:{groupId:e.groupId,promptIndex:c,percentage:Math.min(99,Math.round(100*n/(1e3*_dTotal))),status:\"generating\",prompt:`⏳ Waiting ${_left}s left · random delay (settings ${u}–${l}s)`}}).catch(()=>{})}catch{}}}"
+        }
+      ]
+    }
+  ]
+}

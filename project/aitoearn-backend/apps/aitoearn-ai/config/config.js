@@ -186,6 +186,26 @@ module.exports = {
     models: {
       chat: [
         {
+          name: 'cx_agy',
+          description: '9Router Agent Combo',
+          tags: [{ 'en-US': 'Recommended', 'zh-CN': '推荐' }],
+          channel: 'openai',
+          scenes: ['web', 'comment', 'draft-generation'],
+          inputModalities: ['text'],
+          outputModalities: ['text'],
+          pricing: { tiers: [{ input: { text: '0' }, output: { text: '0' } }] },
+        },
+        {
+          name: 'free-tier',
+          description: '9Router Free Chat',
+          tags: [{ 'en-US': 'Free', 'zh-CN': '免费' }],
+          channel: 'openai',
+          scenes: ['web', 'comment', 'draft-generation'],
+          inputModalities: ['text'],
+          outputModalities: ['text'],
+          pricing: { tiers: [{ input: { text: '0' }, output: { text: '0' } }] },
+        },
+        {
           name: 'gemini-3.1-pro-preview',
           description: 'Gemini 3.1 Pro Preview',
           channel: 'gemini',
@@ -293,8 +313,8 @@ module.exports = {
           },
         },
         {
-          name: 'gpt-5.4',
-          description: 'GPT 5.4',
+          name: 'cx/gpt-5.4',
+          description: 'GPT 5.4 (9Router)',
           channel: 'openai',
           scenes: ['plugin', 'comment'],
           inputModalities: ['text', 'image'],
@@ -309,8 +329,8 @@ module.exports = {
           },
         },
         {
-          name: 'gpt-5.5',
-          description: 'GPT 5.5',
+          name: 'cx/gpt-5.5',
+          description: 'GPT 5.5 (9Router)',
           channel: 'openai',
           scenes: ['web', 'plugin', 'comment', 'draft-generation'],
           inputModalities: ['text', 'image'],
@@ -578,7 +598,7 @@ module.exports = {
     },
     draftGeneration: {
       planner: {
-        defaultModel: 'gpt-5.5',
+        defaultModel: 'cx/gpt-5.5',
       },
       queue: {
         lowPriorityMinPriority: 1000,

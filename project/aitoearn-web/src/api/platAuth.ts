@@ -77,6 +77,7 @@ export function checkMetaAuthApi(taskId: any) {
   return request({
     url: `plat/meta/auth/info/${taskId}`,
     method: 'GET',
+    silent: true,
   })
 }
 
@@ -162,6 +163,7 @@ export function checkTiktokAuthApi(taskId: any) {
   return request({
     url: `plat/tiktok/auth/info/${taskId}`,
     method: 'GET',
+    silent: true,
   })
 }
 
@@ -210,5 +212,6 @@ export function checkPinterestAuthApi(taskId: any) {
     params: {
       taskId,
     },
+    silent: true,
   })
 }

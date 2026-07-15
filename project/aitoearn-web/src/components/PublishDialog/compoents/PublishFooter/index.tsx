@@ -46,7 +46,8 @@ export const PublishFooter = memo(
         data-testid="publish-footer"
       >
         <div className="flex w-full justify-end gap-3">
-          {step === 0 && pubListChoosed.length >= 2 ? (
+          {/* Multi-channel: publish immediately (settings already on step 0). Optional full-page customize still available. */}
+          {step === 0 && pubListChoosed.length >= 2 && (
             <Button
               size="lg"
               variant="outline"
@@ -54,10 +55,11 @@ export const PublishFooter = memo(
               className="gap-2 cursor-pointer"
               data-testid="publish-customize-button"
             >
-              {t('buttons.customizePerAccount')}
+              {t('buttons.fullChannelReview')}
               <ArrowRight className="h-4 w-4" />
             </Button>
-          ) : (
+          )}
+          {pubListChoosed.length > 0 && (
             <PublishDatePicker loading={createLoading} onClick={triggerPublish} />
           )}
         </div>

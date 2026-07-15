@@ -36,6 +36,8 @@ export interface DraftBoxConfig {
   imageCount: number
   imageSize: string
   selectedPlatforms: PlatType[]
+  /** Platform selection preset: connected channels / all / custom */
+  platformPreset: 'connected' | 'all' | 'custom'
   /** 用户上传的媒体持久化 */
   persistedMedias: IPersistedMedia[]
   /** 品牌图片选择 */
@@ -58,9 +60,11 @@ export interface DraftBoxConfig {
 
 /** 默认配置（与原 systemStore 一致） */
 const DEFAULT_CONFIG: DraftBoxConfig = {
+  // Vertical social SEO default (TikTok / Reels / Shorts) — keep in sync with
+  // src/app/api/ai/providers/extension/seoMediaDefaults.ts (Hub may override server-side)
   aspectRatio: '9:16',
-  duration: 8,
-  resolution: '',
+  duration: 15,
+  resolution: '1080p',
   quantity: 1,
   modelType: '' as VideoModelType,
   selectedVideoModels: [],
@@ -70,6 +74,7 @@ const DEFAULT_CONFIG: DraftBoxConfig = {
   imageCount: 3,
   imageSize: '1K',
   selectedPlatforms: [],
+  platformPreset: 'connected',
   persistedMedias: [],
   selectedImageIds: [],
   promptValue: '',

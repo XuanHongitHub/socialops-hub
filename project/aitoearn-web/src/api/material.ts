@@ -145,13 +145,13 @@ export async function apiGetMaterialList(groupId: string, pageNo: number, pageSi
     params.useCount = filters.useCount
   const res = await http.get<{ list: PromotionMaterial[], total: number }>(`material/list/${pageNo}/${pageSize}`, params)
   const list = res?.data?.list
-  // 兼容代码，图文草稿补封面
+  // 兼容代码，图文草稿补封面（mediaList 可能为空 — 勿抛错，否则 All tab 整表空白）
   if (list && list.length > 0) {
-    list.map((item) => {
-      if (item.mediaList[0].type === 'img') {
-        item.coverUrl = item.mediaList[0].url
-      }
-    })
+    for (const item of list) {
+      const first = item.mediaList?.[0]
+      if (first?.type === 'img' && first.url)
+        item.coverUrl = first.url
+    }
   }
   return res
 }
@@ -169,9 +169,11 @@ export function apiUpdateMaterial(
     mediaList?: MaterialMedia[]
     title?: string
     desc?: string
+    topics?: string[]
     location?: number[]
     option?: Record<string, any>
     accountTypes?: string[]
+    generationParams?: Record<string, any>
   },
 ) {
   return http.put(`material/info/${id}`, data)

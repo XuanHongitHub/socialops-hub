@@ -35,7 +35,6 @@ import { AccountPlatInfoMap, PlatType } from '@/app/config/platConfig'
 import { useTransClient } from '@/app/i18n/client'
 import AvatarPlat from '@/components/AvatarPlat'
 import { MediaPreview } from '@/components/common/MediaPreview'
-import ScrollButtonContainer from '@/components/ScrollButtonContainer'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -60,8 +59,40 @@ export interface IRecordCoreProps {
 }
 
 // 发布状态组件
-function PubStatus({ status }: { status: PublishStatus }) {
+function PubStatus({ record }: { record: PublishRecordItem }) {
   const { t } = useTransClient('publish')
+  const status = record.status
+
+  if (status === PublishStatus.RELEASED && record.accountType === PlatType.Tiktok) {
+    const tikTokStatus = record.linkMeta?.tiktokPublishStatus
+    if (record.platformWorkId || record.dataId) {
+      return (
+        <div className="inline-flex items-center">
+          <Badge
+            variant="secondary"
+            className="gap-1.5 bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900 dark:text-purple-200 dark:border-purple-700"
+            title={typeof tikTokStatus === 'string' ? tikTokStatus : 'Sent to TikTok inbox'}
+          >
+            TikTok draft
+            <Send className="h-3 w-3" />
+          </Badge>
+        </div>
+      )
+    }
+
+    return (
+      <div className="inline-flex items-center">
+        <Badge
+          variant="secondary"
+          className="gap-1.5 bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900 dark:text-amber-200 dark:border-amber-700"
+          title="Saved in Socials Hub only. Not confirmed by TikTok."
+        >
+          Local record
+          <Clock className="h-3 w-3" />
+        </Badge>
+      </div>
+    )
+  }
 
   return (
     <div className="inline-flex items-center">
@@ -175,6 +206,23 @@ const RecordCore = memo(
 
     const isWxSphRecord = publishRecord.accountType === PlatType.WxSph
 
+    const statusSummary = useMemo(() => {
+      if (publishRecord.status === PublishStatus.FAIL)
+        return { label: 'Failed', tone: 'bg-destructive' }
+      if (publishRecord.status === PublishStatus.PUB_LOADING)
+        return { label: 'Sending', tone: 'bg-cyan-500' }
+      if (publishRecord.status === PublishStatus.UNPUBLISH)
+        return { label: 'Queued', tone: 'bg-blue-500' }
+      if (publishRecord.status === PublishStatus.RELEASED && publishRecord.accountType === PlatType.Tiktok) {
+        return publishRecord.platformWorkId || publishRecord.dataId
+          ? { label: 'Draft', tone: 'bg-violet-500' }
+          : { label: 'Local', tone: 'bg-amber-500' }
+      }
+      if (publishRecord.status === PublishStatus.RELEASED)
+        return { label: 'Live', tone: 'bg-emerald-500' }
+      return null
+    }, [publishRecord.accountType, publishRecord.dataId, publishRecord.platformWorkId, publishRecord.status])
+
     const getClientTypeLabel = (clientType?: ClientType) => {
       if (!clientType)
         return null
@@ -244,6 +292,7 @@ const RecordCore = memo(
 
       return items
     }, [publishRecord])
+    const primaryMediaPreview = mediaPreviewItems[0]
 
     const handleCoverClick = (e: React.MouseEvent) => {
       e.stopPropagation()
@@ -272,55 +321,72 @@ const RecordCore = memo(
       await navigator.clipboard.writeText(publishRecord.workLink)
     }
 
-    const shouldShowViewWork = !!publishRecord.workLink
+    const isTikTokDraftRecord
+      = publishRecord.accountType === PlatType.Tiktok
+        && publishRecord.status === PublishStatus.RELEASED
+    const shouldShowViewWork = !!publishRecord.workLink && !isTikTokDraftRecord
     const shouldShowWxSphReviewPending
       = isWxSphRecord && publishRecord.status === PublishStatus.RELEASED && !publishRecord.workLink
     const wxSphReviewPendingTooltip = publishRecord.linkError || t('record.wxSphReviewPendingDesc')
-    const shouldShowRecordMetrics = !isWxSphRecord
+    const shouldShowRecordMetrics = !isWxSphRecord && !!publishRecord.engagement
 
-    // 触发按钮
+    // 日历事件：状态直接可见，已发布内容可一键打开
     const TriggerButton = (
-      <Button
-        data-testid="record-trigger"
-        variant="outline"
-        className={cn(
-          'flex justify-between items-center box-border w-full h-auto',
-          isMobile ? 'px-2.5 py-2.5' : 'px-1.5 py-1.5',
-          'bg-card hover:bg-accent border-border',
-          'rounded-md transition-colors',
-          'text-foreground font-normal',
-          'shadow-none cursor-pointer',
-        )}
-        style={{
-          width: isMobile || calendarViewType === 'week' ? '100%' : `${calendarCallWidth}px`,
-        }}
-      >
-        <div className={cn('flex items-center', isMobile ? 'gap-2.5' : 'gap-1.5')}>
-          <Image
-            src={platIcon || ''}
-            width={28}
-            height={28}
-            className={cn(isMobile ? 'w-7 h-7' : 'w-[25px] h-[25px]')}
-            alt="platform"
-            unoptimized
-          />
-          <div className={cn('font-semibold', isMobile ? 'text-base' : 'text-sm')}>
-            {days.format('HH:mm')}
-          </div>
-        </div>
-        {publishRecord.coverUrl && (
-          <div className="flex items-center">
+      <div className="group/record relative w-full">
+        <Button
+          data-testid="record-trigger"
+          variant="outline"
+          className={cn(
+            'flex h-8 w-full items-center justify-between border-border bg-card px-1.5 py-1 font-normal text-foreground shadow-none transition-colors hover:bg-accent',
+            isMobile && 'h-10 px-2.5',
+          )}
+          style={{
+            width: isMobile || calendarViewType === 'week' ? '100%' : `${calendarCallWidth}px`,
+          }}
+        >
+          <div className={cn('flex min-w-0 items-center', isMobile ? 'gap-2.5' : 'gap-1.5')}>
             <Image
-              src={getOssUrl(publishRecord.coverUrl || '')}
-              width={32}
-              height={32}
-              className={cn('rounded object-cover', isMobile ? 'w-8 h-8' : 'w-6 h-6')}
+              src={platIcon || ''}
+              width={24}
+              height={24}
+              className={cn('shrink-0', isMobile ? 'h-6 w-6' : 'h-5 w-5')}
+              alt="platform"
+              unoptimized
+            />
+            <span className={cn('shrink-0 font-semibold tabular-nums', isMobile ? 'text-sm' : 'text-xs')}>
+              {days.format('HH:mm')}
+            </span>
+            {statusSummary && (
+              <span className="flex min-w-0 items-center gap-1" title={statusSummary.label}>
+                <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', statusSummary.tone)} />
+                <span className="truncate text-[10px] font-medium text-muted-foreground">{statusSummary.label}</span>
+              </span>
+            )}
+          </div>
+          {publishRecord.coverUrl && (
+            <Image
+              src={getOssUrl(publishRecord.coverUrl)}
+              width={24}
+              height={24}
+              className={cn('shrink-0 rounded-sm object-cover', isMobile ? 'h-6 w-6' : 'h-5 w-5', shouldShowViewWork && 'mr-6')}
               alt="cover"
               unoptimized
             />
-          </div>
+          )}
+        </Button>
+        {shouldShowViewWork && (
+          <button
+            type="button"
+            title={t('record.viewWork')}
+            aria-label={t('record.viewWork')}
+            className="absolute right-1 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground opacity-70 transition-colors hover:bg-background hover:text-foreground group-hover/record:opacity-100"
+            onMouseDown={event => event.stopPropagation()}
+            onClick={(event) => { event.stopPropagation(); handleViewWork() }}
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+          </button>
         )}
-      </Button>
+      </div>
     )
 
     // 详情内容（复用于 Popover 和 Dialog）
@@ -332,13 +398,13 @@ const RecordCore = memo(
         {/* 顶部：时间 */}
         <div
           className={cn(
-            'flex justify-between items-center border-b border-border p-2.5 md:p-3',
+            'flex items-center justify-between border-b border-border px-3 py-2',
             inDialog && 'shrink-0 pt-4 pr-10',
           )}
         >
           <div className="flex flex-col gap-1">
             {/* 发布时间 */}
-            <div className="font-semibold flex items-center gap-2 text-sm md:text-base">
+            <div className="flex items-center gap-1.5 text-sm font-semibold">
               {days.format('YYYY-MM-DD HH:mm')}
               <Calendar className="h-3.5 w-3.5 md:h-4 md:w-4" />
             </div>
@@ -356,14 +422,14 @@ const RecordCore = memo(
         {/* 中间：用户信息和内容 */}
         <div
           className={cn(
-            'flex flex-col md:flex-row justify-between gap-3 border-b border-border p-2.5 md:p-3 overflow-hidden',
+            'flex flex-col justify-between gap-2.5 border-b border-border p-3 md:flex-row overflow-hidden',
             inDialog && 'overflow-y-auto',
           )}
         >
           <div className="flex-1 min-w-0">
-            <div className="flex items-center mb-2 md:mb-3">
-              <AvatarPlat account={account} size={isMobile ? 'default' : 'large'} />
-              <span className="ml-2 md:ml-2.5 inline-block font-bold text-sm md:text-base">
+            <div className="mb-2 flex items-center">
+              <AvatarPlat account={account} size="default" />
+              <span className="ml-2 inline-block text-sm font-semibold">
                 {account?.nickname}
               </span>
               {account?.clientType && (
@@ -381,12 +447,12 @@ const RecordCore = memo(
             </div>
             <div
               title={desc}
-              className="line-clamp-3 md:line-clamp-2 overflow-hidden text-ellipsis mt-2 md:mt-2.5 pr-0 md:pr-2.5 text-sm md:text-base"
+              className="line-clamp-2 overflow-hidden text-ellipsis pr-0 text-sm leading-5 md:pr-2"
             >
               {desc}
             </div>
-            <div className="mt-3 md:mt-4">
-              {publishRecord && <span data-testid="record-status-badge"><PubStatus status={publishRecord.status} /></span>}
+            <div className="mt-2">
+              {publishRecord && <span data-testid="record-status-badge"><PubStatus record={publishRecord} /></span>}
             </div>
             {publishRecord.errorMsg && (
               <div title={publishRecord.errorMsg} className="mt-1 text-xs text-destructive">
@@ -415,47 +481,60 @@ const RecordCore = memo(
                 }}
                 className={cn(
                   'rounded-md overflow-hidden cursor-pointer hover:opacity-90 transition-opacity border border-border',
-                  isMobile ? 'w-full aspect-video' : 'w-[145px] h-[145px]',
+                  isMobile ? 'w-full aspect-video' : 'h-28 w-28',
                 )}
               >
-                <Image
-                  src={getOssUrl(publishRecord.coverUrl || publishRecord.imgUrlList?.[0] || '')}
-                  width={290}
-                  height={290}
-                  className="w-full h-full object-cover pointer-events-none"
-                  alt="cover"
-                  unoptimized
-                />
+                {primaryMediaPreview?.type === 'video'
+                  ? (
+                      <video
+                        src={primaryMediaPreview.src}
+                        className="w-full h-full object-cover pointer-events-none"
+                        muted
+                        playsInline
+                        preload="metadata"
+                        aria-label="Video preview"
+                      />
+                    )
+                  : primaryMediaPreview
+                    ? (
+                        <Image
+                          src={primaryMediaPreview.src}
+                          width={290}
+                          height={290}
+                          className="w-full h-full object-cover pointer-events-none"
+                          alt="cover"
+                          unoptimized
+                        />
+                      )
+                    : null}
               </div>
             </div>
           )}
         </div>
 
-        {/* 信息指标 */}
+        {/* Engagement：仅显示平台返回的真实数据 */}
         {shouldShowRecordMetrics && (
-          <ScrollButtonContainer>
-            <div className="flex gap-3 md:gap-4 p-2 md:p-2.5 border-b border-border overflow-x-auto">
-              {recordInfo.map(v => (
-                <div key={v.label} className="flex-shrink-0 md:flex-1 min-w-[60px] md:min-w-0">
-                  <div className="flex items-center gap-1 md:gap-1.5">
-                    {v.icon}
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">{v.label}</span>
-                  </div>
-                  {publishRecord.engagement && (
-                    <div className="text-sm md:text-base font-semibold mt-0.5 md:mt-1">
-                      {publishRecord.engagement[v.key as 'viewCount'] ?? 0}
-                    </div>
-                  )}
+          <div className="flex items-center gap-1.5 border-b border-border px-3 py-2">
+            {recordInfo.map((metric) => {
+              const value = publishRecord.engagement?.[metric.key as 'viewCount'] ?? 0
+              return (
+                <div
+                  key={metric.label}
+                  title={metric.label}
+                  className="flex min-w-0 flex-1 items-center justify-center gap-1 rounded-md bg-muted/45 px-2 py-1 text-xs text-muted-foreground"
+                >
+                  {metric.icon}
+                  <span className="font-medium tabular-nums text-foreground">{value}</span>
                 </div>
-              ))}
-            </div>
-          </ScrollButtonContainer>
+              )
+            })}
+          </div>
         )}
 
         {/* 底部：操作按钮 */}
         <div
           className={cn(
-            'flex gap-2 md:gap-2.5 p-2.5 md:p-3',
+            'flex gap-2 p-2',
             isMobile ? 'flex-col' : 'flex-row justify-end',
             inDialog && 'shrink-0',
           )}
@@ -646,7 +725,7 @@ const RecordCore = memo(
             <PopoverContent
               data-testid="record-detail-popover"
               side="right"
-              className="w-[450px] p-0"
+              className="w-[400px] p-0"
               align="start"
               onInteractOutside={(e) => {
                 if (mediaPreviewOpen) {

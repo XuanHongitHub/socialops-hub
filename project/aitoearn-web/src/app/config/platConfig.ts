@@ -242,7 +242,8 @@ export const AccountPlatInfoMap = new Map<PlatType, IAccountPlatInfo>([
       url: 'https://www.pinterest.com/',
       pubTypes: new Set([PubType.VIDEO, PubType.ImageText]),
       commonPubParamsConfig: {
-        titleMax: 16,
+        // Pinterest pin title limit is 100 chars (not 16 — that was incorrectly tight)
+        titleMax: 100,
         topicMax: 100,
         desMax: 2200,
         imagesMax: 1,
@@ -302,16 +303,43 @@ export const AccountPlatInfoMap = new Map<PlatType, IAccountPlatInfo>([
     },
   ],
 ])
-export const AccountPlatInfoArr = Array.from(AccountPlatInfoMap)
+
+const SOCIALOPS_PLATFORM_ORDER: PlatType[] = [
+  PlatType.Tiktok,
+  PlatType.YouTube,
+  PlatType.Facebook,
+  PlatType.Instagram,
+  PlatType.Pinterest,
+  PlatType.Twitter,
+  PlatType.Threads,
+  PlatType.LinkedIn,
+  PlatType.Xhs,
+  PlatType.Douyin,
+  PlatType.KWAI,
+  PlatType.BILIBILI,
+  PlatType.WxSph,
+  PlatType.WxGzh,
+]
+
+export const AccountPlatInfoArr = SOCIALOPS_PLATFORM_ORDER
+  .map(platform => [platform, AccountPlatInfoMap.get(platform)] as const)
+  .filter((entry): entry is readonly [PlatType, IAccountPlatInfo] => Boolean(entry[1]))
 
 // ========== 任务推广相关配置 ==========
 
-/** 不支持任务推广的平台 */
+/** 不支持任务推广的平台（WeChat 系 + 本地 SocialOps 不推任务） */
 export const TASK_EXCLUDED_PLATFORMS = new Set<PlatType>([
   PlatType.WxSph,
   PlatType.WxGzh,
-  PlatType.Pinterest,
-  PlatType.LinkedIn,
+])
+
+/**
+ * Platforms hidden from draft-box Generate / Photo Post target list.
+ * Keep Pinterest + LinkedIn — they are valid publish targets (user accounts).
+ */
+export const DRAFT_TARGET_EXCLUDED_PLATFORMS = new Set<PlatType>([
+  PlatType.WxSph,
+  PlatType.WxGzh,
 ])
 
 /** 不支持"收藏"互动的平台 */
@@ -326,9 +354,18 @@ export const TaskPlatInfoArr = AccountPlatInfoArr.filter(
   ([platType]) => isTaskPlatformSupported(platType),
 )
 
+/** Draft-box generation target platforms (includes Pinterest / LinkedIn). */
+export const DraftTargetPlatInfoArr = AccountPlatInfoArr.filter(
+  ([platType]) => !DRAFT_TARGET_EXCLUDED_PLATFORMS.has(platType),
+)
+
 /** 判断平台是否支持任务推广 */
 export function isTaskPlatformSupported(platType: PlatType): boolean {
   return !TASK_EXCLUDED_PLATFORMS.has(platType)
+}
+
+export function isDraftTargetPlatform(platType: PlatType): boolean {
+  return !DRAFT_TARGET_EXCLUDED_PLATFORMS.has(platType)
 }
 
 /** 判断平台是否支持收藏互动 */

@@ -12,6 +12,7 @@ dist-ssr
 dist-electron
 release
 *.local
+docker-compose.local.yml
 .vscode
 # Editor directories and files
 .vscode/.debug.env
@@ -45,3 +46,30 @@ public/bin/*
 
 sh/*
 project/web/.cursor/
+
+# Local runtime overrides and OAuth setup artifacts
+.oauth-browser-profile/
+google-*.png
+.ngrok*.log
+.cloudflared*.log
+
+
+.mongo-data/
+.social-asets/
+.social-assets/
+.playwright-mcp/
+.tmp-cdp-profile/
+archive/
+mcps/
+
+# SocialOps local runtime / e2e artifacts (do not ship)
+project/aitoearn-web/artifacts/
+project/aitoearn-web/.tmp-*/
+project/aitoearn-web/.tmp-storyboard-frames/
+project/aitoearn-web/.tmp-tiktok-ref/
+.tmp-tiktok-ref/
+.tmp-*/
+project/aitoearn-web/extensions/cx_agy-plan-debate-state.json
+project/aitoearn-web/extensions/*.zip
+# Local docker secrets / machine-specific config
+project/aitoearn-backend/apps/*/config/config.yaml

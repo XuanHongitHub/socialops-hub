@@ -58,6 +58,10 @@
       "success": "Success",
       "failed": "Failed"
     },
+    "generationFailedTitle": "Generation failed",
+    "generationFailedFallback": "Generation failed. Open the task for details, or try again.",
+    "dismissFailedTask": "Dismiss failed task",
+    "retryGenerate": "Retry",
     "pointsConsumed": "{{points}} points consumed",
     "noGenerationTasks": "No generation tasks",
     "generatingTaskTitle": "Generating content",

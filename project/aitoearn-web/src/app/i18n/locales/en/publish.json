@@ -24,7 +24,8 @@
     "cancelText": "Discard"
   },
   "buttons": {
-    "customizePerAccount": "Next step",
+    "customizePerAccount": "Channel settings",
+    "fullChannelReview": "Full review",
     "cancel": "Cancel",
     "cancelPublish": "Cancel Publish",
     "schedulePublish": "Scheduled Publish",
@@ -48,7 +49,8 @@
     "xhsOffline": "Xiaohongshu account is offline, please download the App to operate",
     "emptyChannel": "No accounts in this channel",
     "noAccount": "No accounts yet, add a channel to get started",
-    "addChannel": "Add Channel"
+    "addChannel": "Add Channel",
+    "clickChannelToConfigure": "Click a channel to expand Post/Reel, privacy, board…"
   },
   "status": {
     "publishFailed": "Failed",

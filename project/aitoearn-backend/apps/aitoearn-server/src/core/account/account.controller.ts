@@ -109,14 +109,6 @@ export class AccountController {
   }
 
   @ApiDoc({
-    summary: 'Get Account Detail',
-  })
-  @Get(':id')
-  async getAccountInfo(@Param() param: AccountIdDto) {
-    return this.accountService.getAccountById(param.id)
-  }
-
-  @ApiDoc({
     summary: 'List All Accounts of Current User',
   })
   @Get('list/all')
@@ -128,6 +120,14 @@ export class AccountController {
       }
     })
     return res
+  }
+
+  @ApiDoc({
+    summary: 'Get Account Detail',
+  })
+  @Get(':id')
+  async getAccountInfo(@Param() param: AccountIdDto) {
+    return this.accountService.getAccountById(param.id)
   }
 
   @ApiDoc({

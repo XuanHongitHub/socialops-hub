@@ -7,10 +7,12 @@
 'use client'
 
 import type { ClipboardEvent, KeyboardEvent } from 'react'
+import type { ChatModel } from '@/api/types/ai'
 import type { IUploadedMedia } from '../MediaUpload'
-import { ArrowUp, Loader2, Square } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { ArrowUp, Check, ChevronsUpDown, Loader2, Search, Square } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTransClient } from '@/app/i18n/client'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Tooltip,
   TooltipContent,
@@ -55,6 +57,9 @@ export interface IChatInputProps {
   className?: string
   /** 是否允许空输入发送（用于首页使用 placeholder 作为默认值的场景） */
   allowEmptySubmit?: boolean
+  models?: ChatModel[]
+  selectedModel?: string
+  onModelChange?: (model: string) => void
 }
 
 /**
@@ -78,10 +83,30 @@ export function ChatInput({
   mode = 'large',
   className,
   allowEmptySubmit = false,
+  models = [],
+  selectedModel,
+  onModelChange,
 }: IChatInputProps) {
   const { t } = useTransClient('chat')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [isFocused, setIsFocused] = useState(false)
+  const [modelOpen, setModelOpen] = useState(false)
+  const [modelSearch, setModelSearch] = useState('')
+
+  const currentModel = useMemo(
+    () => models.find(model => model.name === selectedModel),
+    [models, selectedModel],
+  )
+  const filteredModels = useMemo(() => {
+    const query = modelSearch.trim().toLowerCase()
+    if (!query)
+      return models
+    return models.filter(model =>
+      [model.name, model.description, model.channel, ...(model.tags || [])]
+        .filter(Boolean)
+        .some(value => String(value).toLowerCase().includes(query)),
+    )
+  }, [modelSearch, models])
 
   /** 当前字符数 */
   const currentLength = value.length
@@ -178,8 +203,9 @@ export function ChatInput({
         zIndex: 2,
       }}
       className={cn(
-        'w-full rounded-2xl border bg-card transition-all duration-300 border-border shadow-sm hover:border-border/80 hover:shadow-md',
-        mode === 'large' ? 'p-4' : 'p-3',
+        'w-full border bg-card transition-[border-color,box-shadow] duration-150',
+        isFocused ? 'border-primary/40 shadow-[0_0_0_3px_hsl(var(--primary)/0.08)]' : 'border-border shadow-sm',
+        mode === 'large' ? 'rounded-xl p-4' : 'rounded-xl px-3 py-2.5',
         // 详情页（compact 模式）允许输入区域根据父容器拉伸
         mode === 'compact' && 'h-full flex flex-col',
         className,
@@ -248,6 +274,79 @@ export function ChatInput({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+          {models.length > 0 && selectedModel && onModelChange && (
+            <Popover open={modelOpen} onOpenChange={(open) => { setModelOpen(open); if (!open) setModelSearch('') }}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  disabled={disabled || isGenerating}
+                  className="flex h-8 max-w-[260px] items-center gap-2 rounded-md border border-border bg-background px-2.5 text-left text-xs transition-colors hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label="Select AI model"
+                >
+                  {currentModel?.logo ? (
+                    <img src={currentModel.logo} alt="" className="h-4 w-4 rounded-sm object-contain" />
+                  ) : (
+                    <span className="flex h-4 w-4 items-center justify-center rounded-sm bg-foreground text-[8px] font-semibold text-background">AI</span>
+                  )}
+                  <span className="min-w-0 flex-1 truncate font-medium">
+                    {currentModel?.description || currentModel?.name || selectedModel}
+                  </span>
+                  {currentModel?.channel && (
+                    <span className="hidden shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground sm:inline">
+                      {currentModel.channel}
+                    </span>
+                  )}
+                  <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" side="top" className="w-[340px] max-w-[calc(100vw-32px)] p-0">
+                <div className="flex items-center gap-2 border-b px-3">
+                  <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                  <input
+                    value={modelSearch}
+                    onChange={event => setModelSearch(event.target.value)}
+                    placeholder="Search models..."
+                    className="h-10 min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+                  />
+                </div>
+                <div className="max-h-72 overflow-y-auto p-1.5">
+                  {filteredModels.map(model => (
+                    <button
+                      key={model.name}
+                      type="button"
+                      onClick={() => { onModelChange(model.name); setModelOpen(false); setModelSearch('') }}
+                      className={cn(
+                        'flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors',
+                        model.name === selectedModel ? 'bg-primary/8' : 'hover:bg-muted/70',
+                      )}
+                    >
+                      {model.logo ? (
+                        <img src={model.logo} alt="" className="mt-0.5 h-6 w-6 shrink-0 rounded object-contain" />
+                      ) : (
+                        <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded bg-foreground text-[9px] font-semibold text-background">AI</span>
+                      )}
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          <span className="truncate text-xs font-medium text-foreground">{model.description || model.name}</span>
+                          {model.channel && <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">{model.channel}</span>}
+                        </span>
+                        <span className="mt-0.5 block truncate font-mono text-[10px] text-muted-foreground">{model.name}</span>
+                        {model.tags?.length ? (
+                          <span className="mt-1 flex flex-wrap gap-1">
+                            {model.tags.slice(0, 3).map(tag => <span key={tag} className="rounded-sm bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">{tag}</span>)}
+                          </span>
+                        ) : null}
+                      </span>
+                      <Check className={cn('mt-1 h-3.5 w-3.5 shrink-0 text-primary', model.name === selectedModel ? 'opacity-100' : 'opacity-0')} />
+                    </button>
+                  ))}
+                  {filteredModels.length === 0 && (
+                    <div className="px-3 py-8 text-center text-xs text-muted-foreground">No models found</div>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
           {/* 字数限制提示：只在超出时显示并标红 */}
           {isOverLimit && (
             <div className="text-xs text-destructive">

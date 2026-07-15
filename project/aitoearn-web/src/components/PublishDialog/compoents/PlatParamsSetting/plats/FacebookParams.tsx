@@ -10,6 +10,10 @@ import { forwardRef, memo, useEffect } from 'react'
 import { useTransClient } from '@/app/i18n/client'
 import usePlatParamsCommon from '@/components/PublishDialog/compoents/PlatParamsSetting/hooks/usePlatParamsCoomon'
 import PubParmasTextarea from '@/components/PublishDialog/compoents/PubParmasTextarea'
+import {
+  getPreferredContentCategory,
+  saveChannelContentCategory,
+} from '@/components/PublishDialog/publishChannelPrefs'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { cn } from '@/lib/utils'
@@ -26,16 +30,16 @@ const FacebookParams = memo(
         onImageToImage,
         isMobile,
       )
-      const defaultContentCategory = pubItem.params.video ? 'reel' : 'post'
+      const defaultContentCategory = getPreferredContentCategory(
+        'facebook',
+        Boolean(pubItem.params.video),
+      )
 
       // 初始化Facebook参数
       useEffect(() => {
         const option = pubItem.params.option
         const currentCategory = option.facebook?.content_category
-        const nextCategory
-          = pubItem.params.video
-            ? (currentCategory === 'reel' ? undefined : 'reel')
-            : (!currentCategory ? 'post' : undefined)
+        const nextCategory = !currentCategory ? defaultContentCategory : undefined
 
         if (nextCategory) {
           setOnePubParams(
@@ -51,7 +55,7 @@ const FacebookParams = memo(
             pubItem.account.id,
           )
         }
-      }, [pubItem.account.id, pubItem.params.option, pubItem.params.video, setOnePubParams])
+      }, [pubItem.account.id, pubItem.params.option, pubItem.params.video, setOnePubParams, defaultContentCategory])
 
       return (
         <>
@@ -70,6 +74,7 @@ const FacebookParams = memo(
                   <RadioGroup
                     value={pubItem.params.option.facebook?.content_category || defaultContentCategory}
                     onValueChange={(value) => {
+                      saveChannelContentCategory('facebook', value)
                       const option = pubItem.params.option
                       setOnePubParams(
                         {

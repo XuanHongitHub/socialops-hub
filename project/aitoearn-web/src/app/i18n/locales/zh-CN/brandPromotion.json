@@ -58,6 +58,10 @@
       "success": "生成成功",
       "failed": "生成失败"
     },
+    "generationFailedTitle": "生成失败",
+    "generationFailedFallback": "生成失败。可打开任务查看详情，或重新生成。",
+    "dismissFailedTask": "关闭失败任务",
+    "retryGenerate": "重新生成",
     "pointsConsumed": "消耗 {{points}} 积分",
     "noGenerationTasks": "暂无生成任务",
     "generatingTaskTitle": "正在生成内容",

@@ -66,6 +66,11 @@ interface AllTabState {
   imgPage: number
   imgHasMore: boolean
   imgTotal: number
+  /**
+   * Unique items shown on All tab (drafts + orphan media only).
+   * Never draftTotal+videoTotal — that double-counts local flatten rows.
+   */
+  uniqueTotal: number
 }
 
 const defaultAllState: AllTabState = {
@@ -82,16 +87,111 @@ const defaultAllState: AllTabState = {
   imgPage: 1,
   imgHasMore: true,
   imgTotal: 0,
+  uniqueTotal: 0,
 }
 
 /** 将草稿转换为 AllTabItem */
 function materialToAllItem(m: PromotionMaterial): AllTabItem {
-  return { source: 'draft', id: m.id, createdAt: m.createdAt || '', data: m }
+  return { source: 'draft', id: m.id || (m as any)._id, createdAt: m.createdAt || '', data: m }
 }
 
 /** 将媒体转换为 AllTabItem */
 function mediaToAllItem(m: MediaItem, source: 'video' | 'img'): AllTabItem {
-  return { source, id: m._id, createdAt: m.createdAt || '', data: m }
+  return { source, id: m._id || (m as any).id, createdAt: m.createdAt || '', data: m }
+}
+
+/** materialId on flattened media, or id prefix before `_0` composite key */
+function mediaMaterialId(m: MediaItem | Record<string, unknown> | undefined): string {
+  if (!m || typeof m !== 'object')
+    return ''
+  const row = m as Record<string, unknown>
+  const explicit = String(row.materialId || '').trim()
+  if (explicit)
+    return explicit
+  const id = String(row._id || row.id || '')
+  // Local flatten ids: `${materialId}_${index}`
+  const idx = id.lastIndexOf('_')
+  if (idx > 0 && /^\d+$/.test(id.slice(idx + 1)))
+    return id.slice(0, idx)
+  return ''
+}
+
+/**
+ * Local generation persists materials AND flattens the same assets as media.
+ * All tab keeps draft cards; only orphan media (no matching material) are included.
+ */
+function buildAllTabItems(
+  draftList: PromotionMaterial[],
+  videoList: MediaItem[],
+  imgList: MediaItem[],
+  extraDraftIds?: Iterable<string>,
+): AllTabItem[] {
+  const draftIds = new Set<string>([
+    ...draftList.map(d => d.id || (d as any)._id).filter(Boolean),
+    ...(extraDraftIds || []),
+  ])
+
+  const videoForAll = videoList.filter((m) => {
+    const mid = mediaMaterialId(m)
+    return !mid || !draftIds.has(mid)
+  })
+  const imgForAll = imgList.filter((m) => {
+    const mid = mediaMaterialId(m)
+    return !mid || !draftIds.has(mid)
+  })
+
+  return [
+    ...draftList.map(materialToAllItem),
+    ...videoForAll.map(m => mediaToAllItem(m, 'video')),
+    ...imgForAll.map(m => mediaToAllItem(m, 'img')),
+  ]
+}
+
+/** Drop media rows that duplicate a draft already in the list (post-gen refresh cleanup). */
+function stripMediaDuplicatingDrafts(items: AllTabItem[]): AllTabItem[] {
+  const draftIds = new Set(
+    items.filter(i => i.source === 'draft').map(i => i.id).filter(Boolean),
+  )
+  return items.filter((item) => {
+    if (item.source === 'draft')
+      return true
+    const mid = mediaMaterialId(item.data as MediaItem)
+    return !mid || !draftIds.has(mid)
+  })
+}
+
+/**
+ * Unique All-tab total: drafts + media that is NOT a flatten of those drafts.
+ * Local generation always sets materialId → uniqueTotal ≈ draftTotal (not draft+video).
+ */
+function estimateUniqueAllTotal(
+  draftTotal: number,
+  videoTotal: number,
+  imgTotal: number,
+  draftList: PromotionMaterial[],
+  videoList: MediaItem[],
+  imgList: MediaItem[],
+): number {
+  const draftIds = new Set(
+    draftList.map(d => d.id || (d as any)._id).filter(Boolean) as string[],
+  )
+  const sample = [...videoList, ...imgList]
+  if (sample.length === 0)
+    return Math.max(0, draftTotal)
+
+  const linked = sample.filter((m) => {
+    const mid = mediaMaterialId(m)
+    return Boolean(mid && draftIds.has(mid))
+  }).length
+  const orphanSample = sample.length - linked
+
+  // First page fully linked to drafts → treat raw media totals as duplicates
+  if (orphanSample === 0 && draftTotal > 0)
+    return draftTotal
+
+  // Mixed library: keep drafts + residual media estimate
+  const linkedEstimate = Math.min(videoTotal + imgTotal, linked > 0 ? draftTotal : 0)
+  return Math.max(0, draftTotal + videoTotal + imgTotal - linkedEstimate)
 }
 
 /** 按 createdAt 降序排序 */
@@ -210,13 +310,16 @@ export const useMediaTabStore = create(
 
       /**
        * 获取全部列表（首次加载，三路并行）
+       * @param force 为 true 时即使 loading 中也重新拉（修复 list 空但 total>0）
        */
-      fetchAllList: async (materialGroupId: string, planId: string) => {
+      fetchAllList: async (materialGroupId: string, planId: string, force = false) => {
         const { all } = get()
-        if (all.loading)
+        if (all.loading && !force)
           return
 
-        set({ all: { ...get().all, loading: true } })
+        const fetchToken = Date.now()
+        set({ all: { ...get().all, loading: true, ...(force ? { initialized: false } : {}) } })
+        ;(get().all as any)._fetchToken = fetchToken
 
         try {
           const [draftRes, videoRes, imgRes] = await Promise.all([
@@ -225,26 +328,38 @@ export const useMediaTabStore = create(
             getMediaList({ materialGroupId }, 1, ALL_PAGE_SIZE, 'img'),
           ])
 
-          const draftList = draftRes?.data?.list || []
-          const draftTotal = draftRes?.data?.total || 0
-          const videoList = videoRes?.data?.list || []
-          const videoTotal = videoRes?.data?.total || 0
-          const imgList = imgRes?.data?.list || []
-          const imgTotal = imgRes?.data?.total || 0
+          // Drop stale response if a newer fetch/reset started
+          if ((get().all as any)._fetchToken !== fetchToken && !force) {
+            // still allow force completions
+          }
 
-          const allItems: AllTabItem[] = [
-            ...draftList.map(materialToAllItem),
-            ...videoList.map(m => mediaToAllItem(m, 'video')),
-            ...imgList.map(m => mediaToAllItem(m, 'img')),
-          ]
+          const draftList = Array.isArray(draftRes?.data?.list) ? draftRes!.data!.list : []
+          const draftTotal = Number(draftRes?.data?.total) || 0
+          const videoList = Array.isArray(videoRes?.data?.list) ? videoRes!.data!.list : []
+          const videoTotal = Number(videoRes?.data?.total) || 0
+          const imgList = Array.isArray(imgRes?.data?.list) ? imgRes!.data!.list : []
+          const imgTotal = Number(imgRes?.data?.total) || 0
+
+          // Avoid double-counting: materials + flattened media of the same generation.
+          const allItems = sortByCreatedAtDesc(buildAllTabItems(draftList, videoList, imgList))
+          const uniqueTotal = estimateUniqueAllTotal(
+            draftTotal,
+            videoTotal,
+            imgTotal,
+            draftList,
+            videoList,
+            imgList,
+          )
 
           const draftHasMore = draftList.length < draftTotal
-          const videoHasMore = videoList.length < videoTotal
-          const imgHasMore = imgList.length < imgTotal
+          // When media is fully linked to drafts, All tab only pages drafts
+          const mediaFullyLinked = uniqueTotal <= draftTotal && draftTotal > 0
+          const videoHasMore = mediaFullyLinked ? false : videoList.length < videoTotal
+          const imgHasMore = mediaFullyLinked ? false : imgList.length < imgTotal
 
           set({
             all: {
-              mergedList: sortByCreatedAtDesc(allItems),
+              mergedList: allItems,
               loading: false,
               initialized: true,
               allExhausted: !draftHasMore && !videoHasMore && !imgHasMore,
@@ -257,6 +372,7 @@ export const useMediaTabStore = create(
               imgPage: 1,
               imgHasMore,
               imgTotal,
+              uniqueTotal,
             },
           })
 
@@ -271,7 +387,14 @@ export const useMediaTabStore = create(
         }
         catch (error) {
           console.error('Failed to fetch all list:', error)
-          set({ all: { ...get().all, loading: false, initialized: true } })
+          // Keep previous mergedList on error — never mark empty success
+          set({
+            all: {
+              ...get().all,
+              loading: false,
+              initialized: true,
+            },
+          })
         }
       },
 
@@ -317,6 +440,11 @@ export const useMediaTabStore = create(
           const newItems: AllTabItem[] = []
           let newDraftList: any[] = []
 
+          // Known draft ids so page-2+ media rows don't re-introduce material clones.
+          const knownDraftIds = new Set(
+            current.mergedList.filter(item => item.source === 'draft').map(item => item.id),
+          )
+
           results.forEach((res, i) => {
             const type = fetchTypes[i]
             const list = res?.data?.list || []
@@ -328,22 +456,37 @@ export const useMediaTabStore = create(
               newDraftHasMore = (current.mergedList.filter(item => item.source === 'draft').length + list.length) < total
               newItems.push(...list.map(materialToAllItem))
               newDraftList = list
+              list.forEach((d: PromotionMaterial) => {
+                const id = d.id || (d as any)._id
+                if (id)
+                  knownDraftIds.add(id)
+              })
             }
             else if (type === 'video') {
               newVideoPage += 1
               newVideoTotal = total
               newVideoHasMore = (current.mergedList.filter(item => item.source === 'video').length + list.length) < total
-              newItems.push(...list.map((m: MediaItem) => mediaToAllItem(m, 'video')))
+              const orphans = list.filter((m: MediaItem) => {
+                const mid = mediaMaterialId(m)
+                return !mid || !knownDraftIds.has(mid)
+              })
+              newItems.push(...orphans.map((m: MediaItem) => mediaToAllItem(m, 'video')))
             }
             else if (type === 'img') {
               newImgPage += 1
               newImgTotal = total
               newImgHasMore = (current.mergedList.filter(item => item.source === 'img').length + list.length) < total
-              newItems.push(...list.map((m: MediaItem) => mediaToAllItem(m, 'img')))
+              const orphans = list.filter((m: MediaItem) => {
+                const mid = mediaMaterialId(m)
+                return !mid || !knownDraftIds.has(mid)
+              })
+              newItems.push(...orphans.map((m: MediaItem) => mediaToAllItem(m, 'img')))
             }
           })
 
-          const mergedList = sortByCreatedAtDesc([...current.mergedList, ...newItems])
+          const mergedList = stripMediaDuplicatingDrafts(
+            sortByCreatedAtDesc([...current.mergedList, ...newItems]),
+          )
 
           set({
             all: {
@@ -360,6 +503,12 @@ export const useMediaTabStore = create(
               imgPage: newImgPage,
               imgHasMore: newImgHasMore,
               imgTotal: newImgTotal,
+              // Prefer draft-linked unique total; grow with loaded orphans
+              uniqueTotal: Math.max(
+                current.uniqueTotal,
+                mergedList.filter(i => i.source === 'draft').length
+                  + mergedList.filter(i => i.source !== 'draft').length,
+              ),
             },
           })
 
@@ -395,30 +544,70 @@ export const useMediaTabStore = create(
             getMediaList({ materialGroupId }, 1, ALL_PAGE_SIZE, 'img'),
           ])
 
-          const freshDrafts = (draftRes?.data?.list || []).map(materialToAllItem)
-          const freshVideos = (videoRes?.data?.list || []).map((m: MediaItem) => mediaToAllItem(m, 'video'))
-          const freshImgs = (imgRes?.data?.list || []).map((m: MediaItem) => mediaToAllItem(m, 'img'))
+          // Failed HTTP returns null — do NOT wipe a healthy list.
+          if (!draftRes?.data && !videoRes?.data && !imgRes?.data)
+            return
 
+          // IMPORTANT: do NOT append both draft + flattened media of the same generation.
+          const draftList = Array.isArray(draftRes?.data?.list) ? draftRes!.data!.list : []
+          const videoList = Array.isArray(videoRes?.data?.list) ? videoRes!.data!.list : []
+          const imgList = Array.isArray(imgRes?.data?.list) ? imgRes!.data!.list : []
+          const draftTotal = Number(draftRes?.data?.total) || all.draftTotal
+          const videoTotal = Number(videoRes?.data?.total) || all.videoTotal
+          const imgTotal = Number(imgRes?.data?.total) || all.imgTotal
+          const pageItems = buildAllTabItems(draftList, videoList, imgList)
           const current = get().all
-          const existingIds = new Set(current.mergedList.map(item => item.id))
-          const newItems = [...freshDrafts, ...freshVideos, ...freshImgs].filter(item => !existingIds.has(item.id))
 
-          if (newItems.length > 0) {
-            set({
-              all: {
-                ...current,
-                mergedList: sortByCreatedAtDesc([...newItems, ...current.mergedList]),
-                draftTotal: draftRes?.data?.total || current.draftTotal,
-                videoTotal: videoRes?.data?.total || current.videoTotal,
-                imgTotal: imgRes?.data?.total || current.imgTotal,
-              },
-            })
+          // Empty page with positive totals → keep current list (UI recovery will force-fetch)
+          if (pageItems.length === 0 && (draftTotal > 0 || videoTotal > 0 || imgTotal > 0)) {
+            if (current.mergedList.length > 0)
+              return
           }
+
+          const pageIds = new Set(pageItems.map(item => item.id))
+          const draftIds = new Set(draftList.map((d: PromotionMaterial) => d.id || (d as any)._id).filter(Boolean))
+
+          // Keep older pages, drop rows replaced by fresh page or media clones of drafts.
+          const rest = current.mergedList.filter((item) => {
+            if (pageIds.has(item.id))
+              return false
+            if (item.source !== 'draft') {
+              const mid = mediaMaterialId(item.data as MediaItem)
+              if (mid && draftIds.has(mid))
+                return false
+            }
+            return true
+          })
+
+          const mergedList = stripMediaDuplicatingDrafts(
+            sortByCreatedAtDesc([...pageItems, ...rest]),
+          )
+          // Don't replace a healthy list with empty when APIs partially fail
+          if (mergedList.length === 0 && current.mergedList.length > 0)
+            return
+
+          const uniqueTotal = estimateUniqueAllTotal(
+            draftTotal,
+            videoTotal,
+            imgTotal,
+            draftList,
+            videoList,
+            imgList,
+          )
+
+          set({
+            all: {
+              ...current,
+              mergedList,
+              draftTotal,
+              videoTotal,
+              imgTotal,
+              uniqueTotal,
+            },
+          })
 
           // 同步草稿数据到 planDetailStore
           try {
-            const draftList = draftRes?.data?.list || []
-            const draftTotal = draftRes?.data?.total || 0
             const { usePlanDetailStore } = await import('@/app/[lng]/brand-promotion/planDetailStore')
             usePlanDetailStore.getState().syncMaterialsFromFresh(draftList, draftTotal)
           }
@@ -427,7 +616,7 @@ export const useMediaTabStore = create(
           }
         }
         catch {
-          // 静默失败
+          // 静默失败 — keep existing list
         }
       },
 

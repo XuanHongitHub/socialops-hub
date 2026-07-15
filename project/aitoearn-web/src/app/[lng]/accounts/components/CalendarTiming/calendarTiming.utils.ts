@@ -6,6 +6,13 @@ import { getDayjsLocale } from '@/lib/i18n/languageConfig'
 dayjs.extend(utc)
 dayjs.extend(timezone)
 
+export const SOCIALOPS_TIME_ZONE
+  = process.env.NEXT_PUBLIC_SOCIALOPS_TIME_ZONE || 'Asia/Ho_Chi_Minh'
+
+function isWallClockString(date: dayjs.ConfigType): date is string {
+  return typeof date === 'string' && !/(?:Z|[+-]\d{2}:?\d{2})$/i.test(date)
+}
+
 // 日历国际化
 export function getFullCalendarLang(lang: string) {
   return getDayjsLocale(lang)
@@ -42,12 +49,20 @@ export function getTransitionClassNames(direction: 'left' | 'right' | 'fade') {
 
 // 获取UTC days
 export function getUtcDays(date: dayjs.ConfigType) {
-  return dayjs(date).utc()
+  return getDays(date).utc()
 }
 
-// 获取当前时区的days
+// 使用应用时区，避免浏览器/代理所在地改变日历时间
 export function getDays(date?: dayjs.ConfigType) {
-  return dayjs(date)
+  if (date === undefined) {
+    return dayjs().tz(SOCIALOPS_TIME_ZONE)
+  }
+
+  if (isWallClockString(date)) {
+    return dayjs.tz(date, SOCIALOPS_TIME_ZONE)
+  }
+
+  return dayjs(date).tz(SOCIALOPS_TIME_ZONE)
 }
 
 /**

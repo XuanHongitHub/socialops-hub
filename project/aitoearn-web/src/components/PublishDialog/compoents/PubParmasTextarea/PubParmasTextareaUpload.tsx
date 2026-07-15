@@ -271,17 +271,23 @@ const PubParmasTextareaUpload = memo(
             return
           }
 
-          // 处理视频
-          const videoFiles = fileList.filter(file => file.type.startsWith('video/'))
-          for (const file of videoFiles) {
-            const video = await formatVideo(file)
-            await uploadVideo(video)
-          }
+          try {
+            // 处理视频
+            const videoFiles = fileList.filter(file => file.type.startsWith('video/'))
+            for (const file of videoFiles) {
+              const video = await formatVideo(file)
+              await uploadVideo(video)
+            }
 
-          // 处理图片
-          const imageFiles = fileList.filter(file => file.type.startsWith('image/'))
-          if (imageFiles.length > 0) {
-            await uploadImg(imageFiles)
+            // 处理图片
+            const imageFiles = fileList.filter(file => file.type.startsWith('image/'))
+            if (imageFiles.length > 0) {
+              await uploadImg(imageFiles)
+            }
+          }
+          catch (error) {
+            console.error(error)
+            toast.error('上传失败，请稍后重试')
           }
 
           // 清空 input 以便下次选择同一文件

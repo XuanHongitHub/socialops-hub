@@ -1,0 +1,21 @@
+{
+    "timestamp":  "2026-07-14T10:39:41.6112850+07:00",
+    "mode":  "apply-only",
+    "localVersion":  "3.2.1.0",
+    "patchReport":  [
+                        {
+                            "Patch":  "premium-unlock",
+                            "File":  "index.html-Dpfjgpbd.js",
+                            "Status":  "already",
+                            "Applied":  "exact:default-premium-state:already, exact:rd-always-pro:already, exact:dd-always-pro:already, exact:logout-keeps-premium:already, exact:storage-load-force-pro:already, exact:daily-limit-unlimited:already, exact:is-limit-reached-always-false:already, regex:fallback-ispro-default:already, regex:fallback-limit-reached:already, regex:fallback-daily-tu:already"
+                        },
+                        {
+                            "Patch":  "remove-author-link",
+                            "File":  "index.html-Dpfjgpbd.js",
+                            "Status":  "ok",
+                            "Applied":  "exact:remove-author-cta-block, exact:blank-author-href, exact:disable-report-bugs-author-link",
+                            "Failed":  ""
+                        }
+                    ],
+    "overlays":  0
+}

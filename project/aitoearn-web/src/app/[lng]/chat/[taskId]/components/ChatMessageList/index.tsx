@@ -90,7 +90,7 @@ export function ChatMessageList({
     <div className="flex-1 relative overflow-hidden">
       {/* 消息列表 - 外层负责滚动，内层限宽居中 */}
       <div ref={containerRef} onScroll={onScroll} className="h-full overflow-y-auto">
-        <div className="max-w-6xl mx-auto px-4 pt-4 pb-4 flex gap-4 flex-col">
+        <div className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-6">
           {filteredMessages.map((message, index) => {
             // 判断是否为最后一条 assistant 消息（用于显示工作流）
             const isLastAssistant
@@ -127,8 +127,8 @@ export function ChatMessageList({
 
           {/* 评分引导 UI */}
           {showRatingUI && (
-            <div className="flex flex-col items-start gap-3 py-6">
-              <p className="text-sm text-muted-foreground">{t('rating.feedbackPrompt')}</p>
+            <div className="mt-2 flex items-center gap-3 border-t border-border/60 py-4">
+              <p className="text-xs text-muted-foreground">{t('rating.feedbackPrompt')}</p>
               <StarRating onChange={handleStarClick} size="md" />
             </div>
           )}

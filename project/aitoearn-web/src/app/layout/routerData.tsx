@@ -6,6 +6,8 @@ import {
   Bot,
   History,
   Home,
+  MonitorSmartphone,
+  Network,
   Sparkles,
   Upload,
 } from 'lucide-react'
@@ -27,7 +29,7 @@ export const routerData: IRouterDataItem[] = [
   {
     name: 'Content Management',
     translationKey: 'header.draftBox',
-    path: '/',
+    path: '/draft-box',
     icon: <Home size={20} />,
   },
   {
@@ -54,6 +56,18 @@ export const routerData: IRouterDataItem[] = [
     translationKey: 'header.agentAssets',
     path: '/agent-assets',
     icon: <Bot size={20} />,
+  },
+  {
+    name: 'Provider Console',
+    translationKey: 'providerConsole',
+    path: '/providers',
+    icon: <Network size={20} />,
+  },
+  {
+    name: 'Browser Workspace',
+    translationKey: 'browserWorkspace',
+    path: '/workspace',
+    icon: <MonitorSmartphone size={20} />,
   },
 ]
 

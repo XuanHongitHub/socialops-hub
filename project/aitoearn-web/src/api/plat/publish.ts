@@ -54,18 +54,18 @@ export function apiCreatePublish(data: PublishParams) {
 // 查询发布列表
 export function getPublishList(data: GetPublishListParams) {
   return request<PublishRecordItem[]>({
-    url: 'plat/publish/posts',
-    method: 'POST',
-    data,
+    url: 'v2/channels/publish/records',
+    method: 'GET',
+    params: data,
   })
 }
 
 // 查询发布队列（列表模式使用的新接口）
 export function getPublishQueue(data: any) {
   return request<PublishRecordItem[]>({
-    url: 'plat/publish/statuses/queued/posts',
-    method: 'POST',
-    data,
+    url: 'v2/channels/publish/records/queued',
+    method: 'GET',
+    params: data,
   })
 }
 

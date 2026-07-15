@@ -73,7 +73,10 @@ function mergeDraftGenerationTasks(current: DraftGenerationTask[], incoming: Dra
     const currentTask = taskMap.get(task.id)
     taskMap.set(task.id, currentTask ? { ...currentTask, ...task } : task)
   })
-  return sortDraftGenerationTasks(Array.from(taskMap.values()))
+  // Success leaves the queue UI (results show in media list); keep generating + failed.
+  return sortDraftGenerationTasks(
+    Array.from(taskMap.values()).filter(task => task.status !== 'success'),
+  )
 }
 
 function buildDraftGenerationTaskPlaceholder(
@@ -480,10 +483,142 @@ export const usePlanDetailStore = create(
         })
       },
 
+      /** Remove finished/failed tasks from the local queue (user dismiss). */
+      dismissGenerationTasks: (taskIds: string[]) => {
+        if (taskIds.length === 0)
+          return
+        const remove = new Set(taskIds)
+        const generationTasks = get().generationTasks.filter(task => !remove.has(task.id))
+        set({
+          generationTasks,
+          generatingCount: countGeneratingTasks(generationTasks),
+        })
+      },
+
+      /** Cancel stuck generating task on server, then drop from queue UI */
+      cancelGenerationTask: async (taskId: string) => {
+        if (!taskId)
+          return false
+        try {
+          const { apiCancelDraftGenerationTask } = await import('@/api/draftGeneration')
+          await apiCancelDraftGenerationTask(taskId)
+        }
+        catch {
+          // still remove from UI
+        }
+        const generationTasks = get().generationTasks.filter(task => task.id !== taskId)
+        set({
+          generationTasks,
+          generatingCount: countGeneratingTasks(generationTasks),
+        })
+        return true
+      },
+
+      /**
+       * Retry failed task with original request payload.
+       * `seed` is required when the task only lives in Generation Tasks dialog history
+       * (not in the live masonry queue).
+       */
+      retryGenerationTask: async (taskId: string, seed?: DraftGenerationTask) => {
+        const failed = seed?.id === taskId
+          ? seed
+          : (get().generationTasks.find(t => t.id === taskId) || seed)
+        if (!failed?.request) {
+          toast.error('Cannot retry: original generation params missing')
+          return false
+        }
+        const req = failed.request
+        const groupId = req.groupId || get().currentPlan?.id
+        if (!groupId) {
+          toast.error('Cannot retry: draft box / plan not selected')
+          return false
+        }
+
+        // Drop failed card from live queue (dialog list updates via merge / caller)
+        methods.dismissGenerationTasks([taskId])
+
+        const model = req.model || req.imageModel
+        if (!model) {
+          toast.error('Cannot retry: model missing from original request')
+          return false
+        }
+
+        // Image-text path when imageModel present without video model pattern
+        const isImageText = Boolean(req.imageModel && !req.model)
+
+        try {
+          if (isImageText) {
+            const res = await apiCreateImageTextDraft({
+              quantity: 1,
+              groupId,
+              prompt: String(req.prompt || ''),
+              captionPrompt: req.captionPrompt,
+              imageModel: String(req.imageModel || model),
+              imageCount: req.imageCount,
+              imageUrls: req.imageUrls,
+              aspectRatio: req.aspectRatio,
+              imageSize: req.imageSize,
+              platforms: req.platforms,
+              draftType: (req.draftType as ImageTextDraftType) || 'draft',
+            })
+            if (res?.code === 0 && res.data?.taskIds?.length) {
+              methods.syncGenerationTasks(res.data.taskIds.map(id => buildDraftGenerationTaskPlaceholder(id, {
+                ...req,
+                groupId,
+                imageModel: req.imageModel || model,
+              })))
+              toast.success('Retry started')
+              return true
+            }
+            if (res?.message)
+              toast.error(res.message)
+            return false
+          }
+
+          const res = await apiCreateDraftGeneration({
+            quantity: 1,
+            groupId,
+            model: String(model),
+            duration: req.duration,
+            resolution: req.resolution,
+            aspectRatio: req.aspectRatio,
+            forceAspect: req.forceAspect,
+            prompt: req.prompt,
+            captionPrompt: req.captionPrompt,
+            imageUrls: req.imageUrls,
+            videoUrls: req.videoUrls,
+            platforms: req.platforms,
+            draftType: (req.draftType as VideoDraftType) || 'draft',
+            mode: req.mode,
+            productTitle: req.productTitle,
+            productUrl: req.productUrl,
+            productImageUrl: req.productImageUrl,
+            productNotes: req.productNotes,
+          })
+          if (res?.code === 0 && res.data?.taskIds?.length) {
+            methods.syncGenerationTasks(res.data.taskIds.map(id => buildDraftGenerationTaskPlaceholder(id, {
+              ...req,
+              groupId,
+              model: String(model),
+            })))
+            toast.success(req.mode === 'storyboard' ? 'Storyboard retry started' : 'Retry started')
+            return true
+          }
+          if (res?.message)
+            toast.error(res.message)
+          return false
+        }
+        catch (e) {
+          toast.error(e instanceof Error ? e.message : 'Retry failed')
+          return false
+        }
+      },
+
       replaceGenerationTasks: (tasks: DraftGenerationTask[]) => {
         const groupId = get().currentPlan?.id || get().initializedPlanId
         const generationTasks = sortDraftGenerationTasks(
-          groupId ? tasks.filter(task => isDraftGenerationTaskForGroup(task, groupId)) : tasks,
+          (groupId ? tasks.filter(task => isDraftGenerationTaskForGroup(task, groupId)) : tasks)
+            .filter(task => task.status !== 'success'),
         )
         set({
           generationTasks,
@@ -614,6 +749,14 @@ export const usePlanDetailStore = create(
         platforms?: PlatType[],
         draftType?: VideoDraftType,
         captionPrompt?: string,
+        forceAspect?: boolean,
+        extras?: {
+          mode?: string
+          productTitle?: string
+          productUrl?: string
+          productImageUrl?: string
+          productNotes?: string
+        },
       ): Promise<BatchGenerationCreateResult> => {
         const groupId = overrideGroupId || get().currentPlan?.id
         const uniqueModelTypes = [...new Set(modelTypes.filter(Boolean))]
@@ -632,12 +775,18 @@ export const usePlanDetailStore = create(
                 duration,
                 resolution,
                 aspectRatio,
+                forceAspect: forceAspect || undefined,
                 prompt,
                 captionPrompt: captionPrompt || undefined,
                 imageUrls,
                 videoUrls,
                 platforms: platforms?.length ? platforms : undefined,
                 draftType,
+                mode: extras?.mode,
+                productTitle: extras?.productTitle,
+                productUrl: extras?.productUrl,
+                productImageUrl: extras?.productImageUrl,
+                productNotes: extras?.productNotes,
               })
 
               if (res?.code !== 0)
@@ -663,6 +812,12 @@ export const usePlanDetailStore = create(
             videoUrls,
             platforms,
             draftType,
+            mode: extras?.mode,
+            productTitle: extras?.productTitle,
+            productUrl: extras?.productUrl,
+            productImageUrl: extras?.productImageUrl,
+            productNotes: extras?.productNotes,
+            forceAspect: forceAspect || undefined,
           })))
 
           if (placeholders.length > 0)

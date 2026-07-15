@@ -11,6 +11,10 @@ import { forwardRef, memo, useEffect } from 'react'
 import { useTransClient } from '@/app/i18n/client'
 import usePlatParamsCommon from '@/components/PublishDialog/compoents/PlatParamsSetting/hooks/usePlatParamsCoomon'
 import PubParmasTextarea from '@/components/PublishDialog/compoents/PubParmasTextarea'
+import {
+  getPreferredContentCategory,
+  saveChannelContentCategory,
+} from '@/components/PublishDialog/publishChannelPrefs'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { cn } from '@/lib/utils'
@@ -27,16 +31,17 @@ const InstagramParams = memo(
         onImageToImage,
         isMobile,
       )
-      const defaultContentCategory = pubItem.params.video ? 'reel' : 'post'
+      // Last choice or Post (BugSell) — not auto-Reels
+      const defaultContentCategory = getPreferredContentCategory(
+        'instagram',
+        Boolean(pubItem.params.video),
+      )
 
       // 初始化Instagram参数
       useEffect(() => {
         const option = pubItem.params.option
         const currentCategory = option.instagram?.content_category
-        const nextCategory
-          = pubItem.params.video
-            ? (currentCategory === 'reel' ? undefined : 'reel')
-            : (!currentCategory ? 'post' : undefined)
+        const nextCategory = !currentCategory ? defaultContentCategory : undefined
 
         if (nextCategory) {
           setOnePubParams(
@@ -52,7 +57,7 @@ const InstagramParams = memo(
             pubItem.account.id,
           )
         }
-      }, [pubItem.account.id, pubItem.params.option, pubItem.params.video, setOnePubParams])
+      }, [pubItem.account.id, pubItem.params.option, pubItem.params.video, setOnePubParams, defaultContentCategory])
 
       return (
         <>
@@ -71,6 +76,7 @@ const InstagramParams = memo(
                   <RadioGroup
                     value={pubItem.params.option.instagram?.content_category || defaultContentCategory}
                     onValueChange={(value) => {
+                      saveChannelContentCategory('instagram', value)
                       const option = pubItem.params.option
                       setOnePubParams(
                         {

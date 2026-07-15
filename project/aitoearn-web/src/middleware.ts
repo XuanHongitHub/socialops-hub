@@ -15,6 +15,9 @@ export function middleware(req: NextRequest) {
   if (ProxyUrls.find(v => req.nextUrl.pathname.includes(v!))) {
     return NextResponse.next()
   }
+  if (/\.(?:png|jpg|jpeg|gif|webp|svg|ico|txt|xml|js|css|map|woff|woff2)$/i.test(req.nextUrl.pathname)) {
+    return NextResponse.next()
+  }
   if (
     [
       '/robots.txt',
@@ -45,8 +48,6 @@ export function middleware(req: NextRequest) {
   let lng: string | undefined | null
   if (req.cookies.has(cookieName))
     lng = acceptLanguage.get(req.cookies.get(cookieName)?.value)
-  if (!lng)
-    lng = acceptLanguage.get(req.headers.get('Accept-Language'))
   if (!lng)
     lng = fallbackLng
 

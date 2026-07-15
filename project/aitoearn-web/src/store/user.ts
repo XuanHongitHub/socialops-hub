@@ -56,6 +56,10 @@ function getState(): IUserStore {
   return lodash.cloneDeep(state)
 }
 
+function getLocalAdminToken() {
+  return process.env.NEXT_PUBLIC_LOCAL_ADMIN_TOKEN?.trim() || undefined
+}
+
 function getQueryToken() {
   if (typeof window === 'undefined')
     return undefined
@@ -99,6 +103,12 @@ export const useUserStore = createPersistStore(
         const queryToken = getQueryToken()
         if (queryToken) {
           methods.loginWithQueryToken(queryToken)
+          return
+        }
+
+        const localAdminToken = !_get().token ? getLocalAdminToken() : undefined
+        if (localAdminToken) {
+          methods.loginWithQueryToken(localAdminToken)
           return
         }
 

@@ -78,23 +78,23 @@ const ErrorSummary = memo(
     }
 
     return (
-      <Collapsible open={isOpen} onOpenChange={setIsOpen} className="mt-4">
+      <Collapsible open={isOpen} onOpenChange={setIsOpen} className="mt-3" data-testid="publish-error-summary">
         {/* 标题栏 - 可点击收起/展开 */}
-        <CollapsibleTrigger className="flex w-full items-center gap-2 p-3 rounded-t-md bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 hover:bg-yellow-100 dark:hover:bg-yellow-950/50 transition-colors cursor-pointer">
+        <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-t-xl border border-amber-200/90 bg-amber-50/90 p-3 transition-colors hover:bg-amber-100/90 dark:border-amber-800/80 dark:bg-amber-950/30 dark:hover:bg-amber-950/50 cursor-pointer">
           {isOpen ? (
-            <ChevronDown className="h-4 w-4 text-yellow-600 dark:text-yellow-500 shrink-0" />
+            <ChevronDown className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
           ) : (
-            <ChevronRight className="h-4 w-4 text-yellow-600 dark:text-yellow-500 shrink-0" />
+            <ChevronRight className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
           )}
-          <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-500 shrink-0" />
-          <span className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
+          <span className="min-w-0 flex-1 text-left text-[13px] font-semibold tracking-tight text-amber-900 dark:text-amber-100">
             {t('errorSummary.title', { count: accountsWithIssues.length })}
           </span>
         </CollapsibleTrigger>
 
         {/* 账号问题列表 */}
-        <CollapsibleContent className="border border-t-0 border-yellow-200 dark:border-yellow-800 rounded-b-md overflow-hidden">
-          <div className="divide-y divide-yellow-200 dark:divide-yellow-800">
+        <CollapsibleContent className="overflow-hidden rounded-b-xl border border-t-0 border-amber-200/90 dark:border-amber-800/80">
+          <div className="divide-y divide-amber-200/80 dark:divide-amber-800/70">
             {accountsWithIssues.map(({ pubItem, errors, warnings }) => {
               const platConfig = AccountPlatInfoMap.get(pubItem.account.type)
 

@@ -10,6 +10,7 @@ import type { IPublishDialogRef } from '@/components/PublishDialog'
 import { useCallback, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { AccountStatus } from '@/app/config/accountConfig'
+import { PlatType } from '@/app/config/platConfig'
 import { useAccountStore } from '@/store/account'
 
 export interface UseNewWorkOptions {
@@ -99,6 +100,20 @@ export function useNewWork(options: UseNewWorkOptions) {
    * 3. 所有在线账号
    */
   const getDefaultAccountIds = useCallback((): string[] | undefined => {
+    const forcedPlatform = typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('platform')
+      : undefined
+
+    if (forcedPlatform) {
+      const forcedPlat = forcedPlatform as PlatType
+      const forcedIds = allAccounts
+        .filter(account => account.status === AccountStatus.USABLE && account.type === forcedPlat)
+        .map(account => account.id)
+
+      if (forcedIds.length > 0)
+        return forcedIds
+    }
+
     // 1. 如果选中了单个账号，优先使用该账号
     if (accountActive && accountActive.status === AccountStatus.USABLE) {
       return [accountActive.id]

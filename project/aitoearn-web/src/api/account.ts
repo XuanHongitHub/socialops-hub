@@ -7,27 +7,30 @@ import type {
 import http from '@/utils/request'
 
 export function createOrUpdateAccountApi(data: Partial<SocialAccount>) {
-  return http.post<SocialAccount>('account/login', data)
+  return http.post<SocialAccount>('v2/channels/accounts', data)
 }
 
 // 更新账户
 export function updateAccountApi(data: Partial<SocialAccount>) {
-  return http.post<SocialAccount>('account/update', data)
+  return http.patch<SocialAccount>(`v2/channels/accounts/${data.id}`, data)
 }
 
 // 更新账户状态
 export function updateAccountStatusApi(data: { id: string, status: number }) {
-  return http.post<SocialAccount>('account/status', data)
+  return http.patch<SocialAccount>(`v2/channels/accounts/${data.id}`, data)
 }
 
 // 获取账户列表
-export function getAccountListApi() {
-  return http.get<SocialAccount[]>('account/list/all')
+export async function getAccountListApi() {
+  const res: any = await http.get<{ list: SocialAccount[], total: number }>('v2/channels/accounts')
+  if (res?.code === 0 && res.data?.list)
+    return { ...res, data: res.data.list }
+  return res
 }
 
 // 获取账户详情
 export function getAccountDetailApi(id: string) {
-  return http.get<SocialAccount>(`account/${id}`)
+  return http.get<SocialAccount>(`v2/channels/accounts/${id}`)
 }
 
 export function updateAccountStatisticsApi(data: UpdateAccountStatisticsParams) {
@@ -36,36 +39,32 @@ export function updateAccountStatisticsApi(data: UpdateAccountStatisticsParams) 
 
 // 删除账户
 export function deleteAccountApi(id: string) {
-  return http.post<SocialAccount>(`account/delete/${id}`)
+  return http.delete<SocialAccount>(`v2/channels/accounts/${id}`)
 }
 
 // 删除多个账户
 export function deleteAccountsApi(ids: string[]) {
-  return http.post<SocialAccount>('account/deletes', {
-    ids,
-  })
+  return http.delete<SocialAccount>('v2/channels/accounts', { ids })
 }
 
 // 创建账户组
 export function createAccountGroupApi(data: Partial<AccountGroupItem>) {
-  return http.post('accountGroup/create', data)
+  return http.post('v2/channels/account-groups', data)
 }
 
 // 更新账户组
 export function updateAccountGroupApi(data: Partial<AccountGroupItem>) {
-  return http.post('accountGroup/update', data)
+  return http.patch(`v2/channels/account-groups/${data.id}`, data)
 }
 
 // 删除账户组
 export function deleteAccountGroupApi(ids: string[]) {
-  return http.post('accountGroup/deletes', {
-    ids,
-  })
+  return http.delete('v2/channels/account-groups', { ids })
 }
 
 // 获取所有账户组
 export async function getAccountGroupApi() {
-  const res: any = await http.get<AccountGroupItem[]>('accountGroup/getList')
+  const res: any = await http.get<AccountGroupItem[]>('v2/channels/account-groups')
   // res.data.push({
   //   id: "68a6d3e5861d0b23ca010123",
   //   ip: "188.166.188.86",

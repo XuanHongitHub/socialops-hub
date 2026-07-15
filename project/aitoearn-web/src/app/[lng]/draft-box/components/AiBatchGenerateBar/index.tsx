@@ -12,22 +12,42 @@ import type { ImageModelInfo, ImageModelPricing, VideoModelInfo, VideoModelPrici
 import type { PlatType } from '@/app/config/platConfig'
 import type { IUploadedMedia } from '@/components/Chat/MediaUpload'
 import isEqual from 'lodash/isEqual'
-import { CircleHelp, Maximize2, RotateCcw, Upload, X } from 'lucide-react'
+import { CircleHelp, Clapperboard, Eye, Loader2, Maximize2, RotateCcw, ShoppingBag, Upload, X } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import VisionProgressPanel, {
+  IDLE_VISION_STATE,
+  type VisionRunState,
+  type VisionStepId,
+} from './VisionProgressPanel'
 import { useShallow } from 'zustand/react/shallow'
 import { usePlanDetailStore } from '@/app/[lng]/brand-promotion/planDetailStore'
 import { AccountPlatInfoMap, TASK_EXCLUDED_PLATFORMS, TaskPlatInfoArr } from '@/app/config/platConfig'
 import { useTransClient } from '@/app/i18n/client'
+import type { ProductPickerSelection } from '@/components/BugSell/ProductPicker'
+import { prefetchBugSellCatalog } from '@/api/bugsell'
+import { BugSellMark } from '@/components/BugSell/BugSellMark'
+import { BugSellProductPicker } from '@/components/BugSell/ProductPicker'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { useMediaUpload } from '@/hooks/useMediaUpload'
 import { useGetClientLng } from '@/hooks/useSystem'
 import { toast } from '@/lib/toast'
 import { cn } from '@/lib/utils'
+import { useAccountStore } from '@/store/account'
 import { getVideoMeta } from '@/utils/media'
 import { getOssUrl } from '@/utils/oss'
+import { SOCIAL_OPS_PRODUCT_CHIP_CLASS, SOCIAL_OPS_PRODUCT_THUMB_CLASS } from '@/lib/socialOps/socialOpsShell'
 import { useDraftBoxConfigStore } from '../../draftBoxConfigStore'
+import { getConnectedPlatforms, resolvePlatformsByPreset } from '../../utils/connectedPlatforms'
 import { buildDraftPromptLimitText, mergeCaptionPromptWithSystemRequirement } from '../../utils/promptLimits'
+import { resolvePublishReadyGenParams } from './platformCompatibility'
 import styles from './AiBatchGenerateBar.module.scss'
 import {
   filterVideoPricingByResolution,
@@ -64,6 +84,11 @@ function buildPersistedMediaSignature(
   )
 }
 
+type ModelSelectionMode = 'single' | 'multiple'
+
+function applyModelSelectionMode<T>(values: T[], mode: ModelSelectionMode) {
+  return mode === 'single' ? values.slice(0, 1) : values
+}
 function normalizeSelectedValues(selectedValues: string[], availableValues: string[], fallbackValue?: string) {
   const normalized = selectedValues.filter((value, index, array) =>
     availableValues.includes(value) && array.indexOf(value) === index)
@@ -232,18 +257,35 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
   // 本地状态（从 config 初始化）
   const [promptValue, setPromptValue] = useState('')
   const [promptEditorOpen, setPromptEditorOpen] = useState(false)
+  const [visionPromptLoading, setVisionPromptLoading] = useState(false)
+  const [visionRun, setVisionRun] = useState<VisionRunState>(IDLE_VISION_STATE)
+  const visionAbortRef = useRef<AbortController | null>(null)
+  const visionDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** 3-shot BOARD-style I2V + stitch (9:16) — slower, better narrative than single clip */
+  const [storyboardMode, setStoryboardMode] = useState(false)
+  const [bugsellPickerOpen, setBugsellPickerOpen] = useState(false)
+  const [bugsellProduct, setBugsellProduct] = useState<ProductPickerSelection | null>(null)
+
+  // Warm BugSell catalog in the background so opening the sheet is near-instant
+  useEffect(() => {
+    const t = window.setTimeout(() => prefetchBugSellCatalog(), 800)
+    return () => window.clearTimeout(t)
+  }, [])
+  /** Default true with product photo: server matches source aspect (no pad). User aspect pick → false (force pad path). */
+  const [matchSourceAspect, setMatchSourceAspect] = useState(true)
   const [aspectRatio, setAspectRatio] = useState(config.aspectRatio)
   const [duration, setDuration] = useState(config.duration)
   const [resolution, setResolution] = useState(config.resolution)
   const [modelType, setModelType] = useState<VideoModelType>(config.modelType)
+  const [modelSelectionMode, setModelSelectionMode] = useState<ModelSelectionMode>('single')
   const [selectedVideoModels, setSelectedVideoModels] = useState<VideoModelType[]>(
-    config.selectedVideoModels.length > 0 ? config.selectedVideoModels : (config.modelType ? [config.modelType] : []),
+    applyModelSelectionMode(config.selectedVideoModels.length > 0 ? config.selectedVideoModels : (config.modelType ? [config.modelType] : []), 'single'),
   )
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [contentType, setContentType] = useState<DraftContentType>(config.contentType)
   const [imageModel, setImageModel] = useState<string>(config.imageModel)
   const [selectedImageModels, setSelectedImageModels] = useState<string[]>(
-    config.selectedImageModels.length > 0 ? config.selectedImageModels : (config.imageModel ? [config.imageModel] : []),
+    applyModelSelectionMode(config.selectedImageModels.length > 0 ? config.selectedImageModels : (config.imageModel ? [config.imageModel] : []), 'single'),
   )
   const [imageCount, setImageCount] = useState(config.imageCount)
   const [imageSize, setImageSize] = useState(config.imageSize)
@@ -257,14 +299,20 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
   const availablePlatforms = useMemo(() =>
     TaskPlatInfoArr.map(([plat]) => plat), [])
 
-  // 初始化 selectedPlatforms：过滤不可用 + 空时默认全选
+  const accountList = useAccountStore(state => state.accountList)
+  const connectedPlatforms = useMemo(() => getConnectedPlatforms(accountList), [accountList])
+
+  const [platformPreset, setPlatformPreset] = useState<'connected' | 'all' | 'custom'>(
+    () => config.platformPreset || 'connected',
+  )
+
+  // 初始化 selectedPlatforms：默认 Connected channels
   const [selectedPlatforms, setSelectedPlatforms] = useState<PlatType[]>(() => {
-    const stored = config.selectedPlatforms
-    if (stored.length === 0) {
-      return availablePlatforms
+    const preset = config.platformPreset || 'connected'
+    if (preset === 'custom' && config.selectedPlatforms.length > 0) {
+      return config.selectedPlatforms.filter(p => AccountPlatInfoMap.has(p) && !TASK_EXCLUDED_PLATFORMS.has(p))
     }
-    // 有持久化数据：过滤掉不可用平台
-    return stored.filter(p => AccountPlatInfoMap.has(p) && !TASK_EXCLUDED_PLATFORMS.has(p))
+    return resolvePlatformsByPreset(preset, accountList, config.selectedPlatforms)
   })
 
   // 用 ref 追踪是否已完成初始自动选中
@@ -369,7 +417,7 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
       return
 
     const availableModels = pricingData.imageModels.map(model => model.model)
-    const nextSelectedModels = normalizeSelectedValues(selectedImageModels, availableModels, imageModel)
+    const nextSelectedModels = applyModelSelectionMode(normalizeSelectedValues(selectedImageModels, availableModels, imageModel), modelSelectionMode)
     const nextPrimaryModel = nextSelectedModels[0] ?? ''
     const nextModelInfos = nextSelectedModels
       .map(model => pricingData.imageModels.find(item => item.model === model))
@@ -409,7 +457,7 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
       return
 
     const availableModels = pricingData.videoModels.map(model => model.name)
-    const nextSelectedModels = normalizeSelectedValues(selectedVideoModels, availableModels, modelType)
+    const nextSelectedModels = applyModelSelectionMode(normalizeSelectedValues(selectedVideoModels, availableModels, modelType), modelSelectionMode)
     const nextPrimaryModel = nextSelectedModels[0] ?? ''
     const nextModelInfos = nextSelectedModels
       .map(model => pricingData.videoModels?.find(item => item.name === model))
@@ -852,9 +900,12 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
     if (configSnapshot.modelType !== modelType) {
       setModelType(configSnapshot.modelType)
     }
-    const nextSelectedVideoModels = configSnapshot.selectedVideoModels.length > 0
-      ? configSnapshot.selectedVideoModels
-      : (configSnapshot.modelType ? [configSnapshot.modelType] : [])
+    const nextSelectedVideoModels = applyModelSelectionMode(
+      configSnapshot.selectedVideoModels.length > 0
+        ? configSnapshot.selectedVideoModels
+        : (configSnapshot.modelType ? [configSnapshot.modelType] : []),
+      modelSelectionMode,
+    )
     if (!isEqual(nextSelectedVideoModels, selectedVideoModels)) {
       setSelectedVideoModels(nextSelectedVideoModels)
     }
@@ -864,9 +915,12 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
     if (configSnapshot.imageModel !== imageModel) {
       setImageModel(configSnapshot.imageModel)
     }
-    const nextSelectedImageModels = configSnapshot.selectedImageModels.length > 0
-      ? configSnapshot.selectedImageModels
-      : (configSnapshot.imageModel ? [configSnapshot.imageModel] : [])
+    const nextSelectedImageModels = applyModelSelectionMode(
+      configSnapshot.selectedImageModels.length > 0
+        ? configSnapshot.selectedImageModels
+        : (configSnapshot.imageModel ? [configSnapshot.imageModel] : []),
+      modelSelectionMode,
+    )
     if (!isEqual(nextSelectedImageModels, selectedImageModels)) {
       setSelectedImageModels(nextSelectedImageModels)
     }
@@ -890,9 +944,15 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
       setMoreOptionsOpen(nextCaptionPromptOpen)
     }
 
-    const nextSelectedPlatforms = configSnapshot.selectedPlatforms.length === 0
-      ? availablePlatforms
-      : configSnapshot.selectedPlatforms.filter(p => AccountPlatInfoMap.has(p) && !TASK_EXCLUDED_PLATFORMS.has(p))
+    const nextPreset = configSnapshot.platformPreset || 'connected'
+    if (nextPreset !== platformPreset)
+      setPlatformPreset(nextPreset)
+
+    const nextSelectedPlatforms = resolvePlatformsByPreset(
+      nextPreset,
+      accountList,
+      configSnapshot.selectedPlatforms,
+    )
 
     if (!isEqual(nextSelectedPlatforms, selectedPlatforms)) {
       setSelectedPlatforms(nextSelectedPlatforms)
@@ -931,23 +991,123 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
     return selectedIds.map(id => imageMap.get(id)).filter(Boolean) as BrandImage[]
   }, [selectedIds, imageList])
 
-  // 平台兼容性检查
+  // Effective aspect for compatibility: when matching source, assume 1:1 risk for UI warnings
+  // (real source often 1:1/4:3 catalog photos that fail IG Reels).
+  const compatibilityAspect = useMemo(() => {
+    if (contentType !== 'video')
+      return aspectRatio
+    if (matchSourceAspect)
+      return '1:1' // worst-case for platform preflight while source-matched
+    return aspectRatio
+  }, [contentType, aspectRatio, matchSourceAspect])
+
+  // 平台兼容性检查（preflight before gen）
   const incompatiblePlatforms = useMemo(() => {
     return checkPlatformCompatibility(
-      { contentType, aspectRatio, duration, imageCount },
+      { contentType, aspectRatio: compatibilityAspect, duration, imageCount },
       availablePlatforms,
       t,
     )
-  }, [contentType, aspectRatio, duration, imageCount, availablePlatforms, t])
+  }, [contentType, compatibilityAspect, duration, imageCount, availablePlatforms, t])
 
-  // 有效选中平台（排除不兼容的），用于限制计算和 API 提交
+  // Keep all selected platforms for API — auto-fix aspect instead of silently dropping IG
   const effectiveSelectedPlatforms = useMemo(() =>
-    selectedPlatforms.filter(p => !incompatiblePlatforms.has(p)), [selectedPlatforms, incompatiblePlatforms])
+    selectedPlatforms.filter(p => {
+      const reasons = incompatiblePlatforms.get(p)
+      if (!reasons?.length)
+        return true
+      // Drop only hard content-type unsupported (e.g. YT for image_text)
+      return !reasons.some(r => /content type|not supported|不支持/i.test(r) && !/aspect|ratio|时长|duration/i.test(r))
+    }), [selectedPlatforms, incompatiblePlatforms])
+
+  // Platforms change → fit aspect + duration to platform rules (IG Reels 4:5–9:16).
+  useEffect(() => {
+    if (contentType !== 'video')
+      return
+    const plats = selectedPlatforms.length ? selectedPlatforms : effectiveSelectedPlatforms
+    if (!plats.length)
+      return
+    const preferred = matchSourceAspect ? '1:1' : aspectRatio
+    const ready = resolvePublishReadyGenParams({
+      platforms: plats,
+      preferredAspect: preferred,
+      preferredDuration: duration,
+      modelRatios: [...currentVideoModelConfig.supportedRatios],
+      modelDurationMin: videoDurationLimits.min,
+      modelDurationMax: Math.min(videoDurationLimits.max, 15),
+      forceSocialPortrait: false,
+      fitPlatforms: true,
+    })
+    if (ready.aspectCorrected) {
+      // Turn off source-match so gen uses pad path (never stretch)
+      if (matchSourceAspect)
+        setMatchSourceAspect(false)
+      if (ready.aspectRatio !== aspectRatio) {
+        setAspectRatio(ready.aspectRatio)
+        updateConfig(configKey, { aspectRatio: ready.aspectRatio })
+      }
+    }
+    if (ready.duration !== duration) {
+      setDuration(ready.duration)
+      updateConfig(configKey, { duration: ready.duration })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    contentType,
+    selectedPlatforms.join(','),
+    currentVideoModelConfig.supportedRatios,
+    videoDurationLimits.min,
+    videoDurationLimits.max,
+    configKey,
+  ])
 
   // 平台限制计算（基于有效平台）
   const effectiveLimitsDetailed: EffectiveLimitsDetailed = useMemo(() => {
     return calcEffectiveLimitsDetailed(effectiveSelectedPlatforms)
   }, [effectiveSelectedPlatforms])
+
+  /** Banner before gen: platforms that would fail aspect with current / source-matched ratio */
+  const platformAspectPreflight = useMemo(() => {
+    if (contentType !== 'video' || selectedPlatforms.length === 0)
+      return null as null | { aspect: string, notes: string[], blocked: Array<[string, string]> }
+    const preferred = matchSourceAspect ? '1:1' : aspectRatio
+    const ready = resolvePublishReadyGenParams({
+      platforms: selectedPlatforms,
+      preferredAspect: preferred,
+      preferredDuration: duration,
+      modelRatios: [...currentVideoModelConfig.supportedRatios],
+      modelDurationMin: videoDurationLimits.min,
+      modelDurationMax: Math.min(videoDurationLimits.max, 15),
+      fitPlatforms: true,
+    })
+    const bad = checkPlatformCompatibility(
+      {
+        contentType: 'video',
+        aspectRatio: ready.aspectRatio,
+        duration: ready.duration,
+        imageCount,
+      },
+      selectedPlatforms,
+      t,
+    )
+    const blocked = [...bad.entries()]
+      .filter(([, reasons]) => reasons.length > 0)
+      .map(([plat, reasons]) => [String(plat), reasons[0]!] as [string, string])
+    if (!ready.aspectCorrected && blocked.length === 0)
+      return null
+    return { aspect: ready.aspectRatio, notes: ready.notes, blocked }
+  }, [
+    contentType,
+    selectedPlatforms,
+    matchSourceAspect,
+    aspectRatio,
+    duration,
+    currentVideoModelConfig.supportedRatios,
+    videoDurationLimits.min,
+    videoDurationLimits.max,
+    imageCount,
+    t,
+  ])
 
   const defaultCaptionSystemPrompt = useMemo(() => {
     if (!isDraftMode)
@@ -1016,6 +1176,8 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
 
   const handleAspectRatioChange = useCallback((ratio: string) => {
     setAspectRatio(ratio)
+    // Manual pick = force this aspect (letterbox pad if needed; never stretch)
+    setMatchSourceAspect(false)
     updateConfig(configKey, { aspectRatio: ratio })
   }, [configKey, updateConfig])
 
@@ -1173,22 +1335,31 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
       setAspectRatio(defaultRatio)
       updateConfig(configKey, { aspectRatio: defaultRatio })
     }
-    // 根据新模型的 maxImages 裁剪选中的图片
+    // 根据新模型的 maxImages 裁剪选中的图片（maxImages=0 时不 wipe — 曾误清 BugSell ref）
     const maxImages = newConfig.maxImages
-    const allowedSelectedCount = Math.max(0, maxImages - localImages.length)
-    const nextSelectedIds = selectedIds.slice(0, allowedSelectedCount)
-    if (!isEqual(nextSelectedIds, selectedIds)) {
-      setSelectedIds(nextSelectedIds)
-      updateConfig(configKey, { selectedImageIds: nextSelectedIds })
-    }
-    // 清理超出限制的本地上传图片
-    const currentLocalImages = localMedias.filter(m => m.type === 'image')
-    if (currentLocalImages.length > 0 && nextSelectedIds.length + currentLocalImages.length > maxImages) {
-      const allowedLocal = Math.max(0, maxImages - nextSelectedIds.length)
-      for (let i = currentLocalImages.length - 1; i >= allowedLocal; i--) {
-        const mediaIndex = localMedias.indexOf(currentLocalImages[i]!)
-        if (mediaIndex >= 0)
-          removeLocalMedia(mediaIndex)
+    if (maxImages > 0) {
+      const allowedSelectedCount = Math.max(0, maxImages - localImages.length)
+      const nextSelectedIds = selectedIds.slice(0, allowedSelectedCount)
+      if (!isEqual(nextSelectedIds, selectedIds)) {
+        setSelectedIds(nextSelectedIds)
+        updateConfig(configKey, { selectedImageIds: nextSelectedIds })
+      }
+      // 清理超出限制的本地上传图片（保留 bugsell-ref-* 产品图）
+      const currentLocalImages = localMedias.filter(m => m.type === 'image')
+      if (currentLocalImages.length > 0 && nextSelectedIds.length + currentLocalImages.length > maxImages) {
+        const productRefs = currentLocalImages.filter(m => String(m.id).startsWith('bugsell-ref-'))
+        const others = currentLocalImages.filter(m => !String(m.id).startsWith('bugsell-ref-'))
+        const keepProduct = Math.min(productRefs.length, maxImages)
+        const keepOthers = Math.max(0, maxImages - keepProduct - nextSelectedIds.length)
+        const drop = [
+          ...others.slice(keepOthers),
+          ...productRefs.slice(keepProduct),
+        ]
+        for (const media of drop) {
+          const mediaIndex = localMedias.indexOf(media)
+          if (mediaIndex >= 0)
+            removeLocalMedia(mediaIndex)
+        }
       }
     }
     // 模型切换时检查视频数量是否超限
@@ -1215,10 +1386,42 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
     }
   }, [aspectRatio, duration, configKey, updateConfig, localImages.length, localMedias, localVideos.length, removeLocalMedia, selectedIds, t, pricingData?.videoModels, isVideoEditMode])
 
+  const handleModelSelectionModeChange = useCallback((mode: ModelSelectionMode) => {
+    setModelSelectionMode(mode)
+    if (mode !== 'single')
+      return
+
+    const selectedVideoModel = selectedVideoModels[0]
+    if (selectedVideoModels.length > 1 && selectedVideoModel)
+      handleVideoModelsChange([selectedVideoModel])
+
+    const selectedImageModel = selectedImageModels[0]
+    if (selectedImageModels.length > 1 && selectedImageModel)
+      handleImageModelsChange([selectedImageModel])
+  }, [handleImageModelsChange, handleVideoModelsChange, selectedImageModels, selectedVideoModels])
   const handlePlatformsChange = useCallback((platforms: PlatType[]) => {
     setSelectedPlatforms(platforms)
-    updateConfig(configKey, { selectedPlatforms: platforms })
+    updateConfig(configKey, { selectedPlatforms: platforms, platformPreset: 'custom' })
+    setPlatformPreset('custom')
   }, [configKey, updateConfig])
+
+  const handlePlatformPresetChange = useCallback((preset: 'connected' | 'all' | 'custom') => {
+    setPlatformPreset(preset)
+    const next = resolvePlatformsByPreset(preset, accountList, selectedPlatforms)
+    setSelectedPlatforms(next)
+    updateConfig(configKey, { platformPreset: preset, selectedPlatforms: next })
+  }, [accountList, configKey, selectedPlatforms, updateConfig])
+
+  // Keep Connected preset in sync when accounts load/change
+  useEffect(() => {
+    if (platformPreset !== 'connected')
+      return
+    const next = resolvePlatformsByPreset('connected', accountList, [])
+    if (!isEqual(next, selectedPlatforms)) {
+      setSelectedPlatforms(next)
+      updateConfig(configKey, { selectedPlatforms: next, platformPreset: 'connected' })
+    }
+  }, [accountList, platformPreset]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleDraftModeChange = useCallback((isDraft: boolean) => {
     if (forceDraftMode) {
@@ -1266,7 +1469,7 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
 
     updateConfig(configKey, {
       aspectRatio: nextAspectRatio,
-      duration: 8,
+      duration: 15,
       resolution: firstVideoResolution,
       quantity: 1,
       modelType: firstVideoModel,
@@ -1289,7 +1492,7 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
     })
 
     setAspectRatio(nextAspectRatio)
-    setDuration(8)
+    setDuration(15)
     setResolution(firstVideoResolution)
     setModelType(firstVideoModel)
     setSelectedVideoModels(firstVideoModel ? [firstVideoModel] : [])
@@ -1466,10 +1669,100 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
       ? mergeCaptionPromptWithSystemRequirement(captionPrompt, captionSystemPrompt)
       : ''
 
+    // Product photo FIRST so I2V locks onto the real SKU (not a random stack image).
     const imageUrls = [
+      ...(bugsellProduct?.thumbnailUrl ? [bugsellProduct.thumbnailUrl] : []),
+      ...localImages.filter(m => m.url && String(m.id).startsWith('bugsell-ref-')).map(m => m.url!),
       ...selectedImages.map(img => getOssUrl(img.url)),
-      ...localImages.filter(m => m.url).map(m => m.url),
-    ]
+      ...localImages.filter(m => m.url && !String(m.id).startsWith('bugsell-ref-')).map(m => m.url!),
+    ].filter((url, index, arr) => url && arr.indexOf(url) === index)
+
+    // Soft hint only — do not block generate when ref image is missing (except storyboard).
+    if (contentType === 'video' && imageUrls.length === 0) {
+      if (storyboardMode) {
+        toast.error('Storyboard needs a product photo — board alone is plan-only.')
+        return
+      }
+      const i2vOnly = selectedVideoModels.some(m => /1\.5|imagine-video-1/i.test(m))
+      toast.warning(i2vOnly
+        ? 'No product photo attached — Video 1.5 works best with a reference image (BugSell product or upload).'
+        : 'No product photo attached — video quality is better with a BugSell/product reference image.')
+    }
+
+    // Fit aspect/duration to selected platforms BEFORE gen (IG Reels 4:5–9:16 etc.)
+    let submitAspectRatio = aspectRatio
+    let submitDuration = duration
+    let forceAspect = contentType === 'video' && !matchSourceAspect
+    if (contentType === 'video') {
+      if (storyboardMode) {
+        // Multi-shot board always 9:16 vertical (~10s stitched)
+        submitAspectRatio = '9:16'
+        submitDuration = 10
+        forceAspect = true
+        if (aspectRatio !== '9:16') {
+          setAspectRatio('9:16')
+          updateConfig(configKey, { aspectRatio: '9:16', duration: 10 })
+        }
+        if (duration !== 10) {
+          setDuration(10)
+        }
+        setMatchSourceAspect(false)
+      }
+      else {
+      const plats = effectiveSelectedPlatforms.length
+        ? effectiveSelectedPlatforms
+        : selectedPlatforms
+      const preferred = matchSourceAspect ? '1:1' : aspectRatio
+      const ready = resolvePublishReadyGenParams({
+        platforms: plats,
+        preferredAspect: preferred,
+        preferredDuration: duration,
+        modelRatios: [...currentVideoModelConfig.supportedRatios],
+        modelDurationMin: videoDurationLimits.min,
+        modelDurationMax: Math.min(videoDurationLimits.max, 15),
+        forceSocialPortrait: false,
+        fitPlatforms: true,
+      })
+      submitAspectRatio = ready.aspectRatio
+      submitDuration = ready.duration
+      if (ready.aspectCorrected) {
+        forceAspect = true // pad path on server — never stretch product
+        setMatchSourceAspect(false)
+        if (ready.aspectRatio !== aspectRatio) {
+          setAspectRatio(ready.aspectRatio)
+          updateConfig(configKey, { aspectRatio: ready.aspectRatio })
+        }
+        toast.warning(
+          `Aspect → ${ready.aspectRatio} for channels (IG Reels 4:5–9:16 · YT Shorts 9:16 / 16:9). Pad, not stretch.`,
+        )
+      }
+      if (ready.duration !== duration) {
+        setDuration(ready.duration)
+        updateConfig(configKey, { duration: ready.duration })
+      }
+
+      // Still incompatible after auto-fix? Block gen and surface reasons.
+      const stillBad = checkPlatformCompatibility(
+        {
+          contentType: 'video',
+          aspectRatio: submitAspectRatio,
+          duration: submitDuration,
+          imageCount,
+        },
+        plats,
+        t,
+      )
+      const blocking = [...stillBad.entries()].filter(([, reasons]) => reasons.length > 0)
+      if (blocking.length > 0) {
+        const msg = blocking
+          .slice(0, 3)
+          .map(([plat, reasons]) => `${plat}: ${reasons[0]}`)
+          .join('\n')
+        toast.error(`Fix platform settings before generate:\n${msg}`)
+        return
+      }
+      }
+    }
 
     if (contentType === 'image_text') {
       if (selectedImageModels.length === 0) {
@@ -1519,12 +1812,18 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
 
       const videoUrls = localVideos.filter(v => v.url).map(v => v.url)
 
+      if (storyboardMode) {
+        toast.info(
+          `Storyboard: board→Scene 1/2/3 commercial prompt · 1× product I2V · ${duration || 10}s · 9:16`,
+        )
+      }
+
       const result = await createBatchGenerationWithModels(
         effectiveQuantity,
         selectedVideoModels,
-        duration,
+        submitDuration,
         resolution || undefined,
-        aspectRatio,
+        submitAspectRatio,
         promptValue.trim() || undefined,
         imageUrls.length > 0 ? imageUrls : undefined,
         videoUrls.length > 0 ? videoUrls : undefined,
@@ -1532,13 +1831,23 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
         effectiveSelectedPlatforms.length > 0 ? effectiveSelectedPlatforms : undefined,
         isDraftMode ? 'draft' : 'video',
         captionPromptForSubmit || undefined,
+        forceAspect,
+        storyboardMode
+          ? {
+              mode: 'storyboard',
+              productTitle: bugsellProduct?.productTitle,
+              productUrl: bugsellProduct?.productUrl,
+              productImageUrl: bugsellProduct?.thumbnailUrl || imageUrls[0],
+              productNotes: bugsellProduct?.productNotes,
+            }
+          : undefined,
       )
       if (result.success) {
         if (result.failedCount > 0) {
           toast.warning(t('detail.multiModelPartialSuccess', { success: result.successCount, failed: result.failedCount }))
         }
         else {
-          toast.success(t('detail.aiBatchGenerate'))
+          toast.success(storyboardMode ? `Storyboard commercial queued (${duration || 10}s)` : t('detail.aiBatchGenerate'))
         }
         onGenerated?.()
       }
@@ -1546,7 +1855,7 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
         toast.error(result.errorMessage || t('detail.multiModelGenerateFailed'))
       }
     }
-  }, [promptValue, aspectRatio, duration, resolution, selectedImages, localImages, localVideos, effectiveQuantity, createBatchGenerationWithModels, createImageTextBatchGenerationWithModels, contentType, selectedImageModels, selectedVideoModels, currentImageAspectRatios.length, imagePricing.length, currentVideoModelConfig.supportedRatios, imageCount, isUploading, t, groupId, onGenerated, effectiveSelectedPlatforms, isDraftMode, captionPrompt, captionSystemPrompt])
+  }, [promptValue, aspectRatio, duration, resolution, selectedImages, localImages, localVideos, effectiveQuantity, createBatchGenerationWithModels, createImageTextBatchGenerationWithModels, contentType, selectedImageModels, selectedVideoModels, currentImageAspectRatios.length, imagePricing.length, currentVideoModelConfig.supportedRatios, imageCount, isUploading, t, groupId, onGenerated, effectiveSelectedPlatforms, selectedPlatforms, isDraftMode, captionPrompt, captionSystemPrompt, bugsellProduct, configKey, updateConfig, matchSourceAspect, videoDurationLimits.min, videoDurationLimits.max, storyboardMode])
 
   // Prompts 探索页 URL（根据当前模型族切换 grok / seedance 提示词页）
   const promptsExploreUrl = useMemo(() => {
@@ -1575,6 +1884,400 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
   const canUploadImage = selectedIds.length + localImages.length < maxUploadImages
   const canUploadVideo = contentType === 'video' && currentVideoModelConfig.maxVideos > 0 && localVideos.length < currentVideoModelConfig.maxVideos
 
+  /** Collect ref images: user paste/upload first, BugSell catalog thumb only as extra. */
+  const collectRefImageUrls = useCallback(() => {
+    const userLocal = localImages
+      .filter(m => m.url && !String(m.id).startsWith('bugsell-ref-'))
+      .map(m => m.url!)
+    const selected = selectedImages.map(img => getOssUrl(img.url)).filter(Boolean)
+    const bugsellRefs = [
+      ...(bugsellProduct?.thumbnailUrl ? [bugsellProduct.thumbnailUrl] : []),
+      ...localImages.filter(m => m.url && String(m.id).startsWith('bugsell-ref-')).map(m => m.url!),
+    ]
+    // User stack is primary (storyboard / main product paste). BugSell is optional catalog.
+    const ordered = userLocal.length || selected.length
+      ? [...userLocal, ...selected, ...bugsellRefs]
+      : [...bugsellRefs]
+    return ordered.filter((url, index, arr) => url && arr.indexOf(url) === index)
+  }, [bugsellProduct?.thumbnailUrl, localImages, selectedImages])
+
+  const dismissVisionPanel = useCallback(() => {
+    if (visionDismissTimerRef.current) {
+      clearTimeout(visionDismissTimerRef.current)
+      visionDismissTimerRef.current = null
+    }
+    setVisionRun(IDLE_VISION_STATE)
+  }, [])
+
+  const cancelVisionRun = useCallback(() => {
+    visionAbortRef.current?.abort()
+    visionAbortRef.current = null
+    setVisionPromptLoading(false)
+    setVisionRun(prev => ({
+      ...prev,
+      active: false,
+      step: 'error',
+      stage: 'Cancelled',
+      error: 'Vision cancelled',
+      percent: prev.percent,
+    }))
+  }, [])
+
+  /** Vision on ALL ref images → fill staff prompt. Live NDJSON progress in panel. */
+  const handleVisionGenPrompt = useCallback(async () => {
+    const imageUrls = collectRefImageUrls()
+    const hasBugsellCatalog = Boolean(
+      bugsellProduct?.productTitle || bugsellProduct?.productUrl,
+    )
+
+    if (!imageUrls[0] && !promptValue.trim() && !hasBugsellCatalog) {
+      toast.warning('Add a reference image (upload / paste) first — Vision reads your refs')
+      return
+    }
+    if (!imageUrls[0]) {
+      toast.warning('Vision works best with a product photo — upload or paste a ref image')
+    }
+
+    // Abort any prior run
+    visionAbortRef.current?.abort()
+    if (visionDismissTimerRef.current) {
+      clearTimeout(visionDismissTimerRef.current)
+      visionDismissTimerRef.current = null
+    }
+    const abort = new AbortController()
+    visionAbortRef.current = abort
+
+    setVisionPromptLoading(true)
+    setVisionRun({
+      active: true,
+      percent: 3,
+      stage: 'Starting Vision…',
+      step: 'collect',
+      detail: hasBugsellCatalog ? 'Refs + BugSell catalog' : 'Reference images only',
+      refCount: imageUrls.length,
+      previewUrls: imageUrls,
+    })
+
+    try {
+      // Don't send stale auto-prompt as "user brief" when it looks like previous Vision output
+      const rawPrompt = promptValue.trim()
+      const looksLikeStaleVision = (
+        (/^Product:\s/i.test(rawPrompt) && /Scene:|Camera:|Hashtags:|Print\/art:/i.test(rawPrompt))
+        || /fashion commercial for|Scene 1 \(/i.test(rawPrompt)
+        || /BOARD_REF_|PRODUCT_REF:/i.test(rawPrompt)
+      )
+      const userBrief = looksLikeStaleVision ? '' : rawPrompt
+
+      const res = await fetch('/api/ai/creative-vision', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/x-ndjson',
+        },
+        signal: abort.signal,
+        body: JSON.stringify({
+          stream: true,
+          productTitle: hasBugsellCatalog ? (bugsellProduct?.productTitle || '') : '',
+          productUrl: hasBugsellCatalog ? (bugsellProduct?.productUrl || '') : '',
+          productNotes: hasBugsellCatalog ? (bugsellProduct?.productNotes || '') : '',
+          prompt: userBrief,
+          imageUrl: imageUrls[0] || '',
+          imageUrls,
+          bugsellCatalog: hasBugsellCatalog,
+          catalogSource: hasBugsellCatalog ? 'bugsell' : 'refs',
+          platforms: effectiveSelectedPlatforms.length
+            ? effectiveSelectedPlatforms
+            : selectedPlatforms,
+          duration: duration || 10,
+          aspectRatio: matchSourceAspect ? '9:16' : (aspectRatio || '9:16'),
+          provider: 'auto',
+          // Prefer commercial board path when Storyboard mode is on
+          mode: storyboardMode ? 'storyboard' : undefined,
+          preferStoryboard: storyboardMode,
+        }),
+      })
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null) as { message?: string } | null
+        throw new Error(errJson?.message || `Vision failed (HTTP ${res.status})`)
+      }
+
+      const contentType = res.headers.get('content-type') || ''
+      type VisionResultData = {
+        prompt?: string
+        motionPrompt?: string
+        title?: string
+        caption?: string
+        hashtags?: string[]
+        source?: string
+        provider?: string
+        refImageCount?: number
+        mode?: string
+        planSource?: string
+        duration?: number
+        boardIsPlanOnly?: boolean
+        productHeroUrl?: string | null
+        boardRefUrls?: string[]
+        classified?: Array<{ url: string, role: string }>
+        vision?: { scene?: string, productType?: string }
+      }
+
+      let resultData: VisionResultData | null = null
+      let resultMessage = ''
+
+      // Prefer NDJSON stream (live steps)
+      if (contentType.includes('ndjson') && res.body) {
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done)
+            break
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+          for (const line of lines) {
+            const trimmed = line.trim()
+            if (!trimmed)
+              continue
+            let evt: Record<string, unknown>
+            try {
+              evt = JSON.parse(trimmed) as Record<string, unknown>
+            }
+            catch {
+              continue
+            }
+            if (evt.type === 'progress') {
+              setVisionRun(prev => ({
+                ...prev,
+                active: true,
+                percent: Number(evt.percent) || prev.percent,
+                stage: String(evt.stage || prev.stage),
+                step: (String(evt.step || prev.step) as VisionStepId) || prev.step,
+                detail: evt.detail != null ? String(evt.detail) : prev.detail,
+                refCount: evt.refCount != null ? Number(evt.refCount) : prev.refCount,
+                resolvedCount: evt.resolvedCount != null ? Number(evt.resolvedCount) : prev.resolvedCount,
+                provider: evt.provider != null ? String(evt.provider) : prev.provider,
+                previewUrls: imageUrls,
+              }))
+            }
+            else if (evt.type === 'result' && evt.data && typeof evt.data === 'object') {
+              resultData = evt.data as VisionResultData
+              resultMessage = String(evt.message || '')
+            }
+            else if (evt.type === 'error') {
+              throw new Error(String(evt.message || 'Vision failed'))
+            }
+          }
+        }
+      }
+      else {
+        // Non-stream JSON fallback
+        const json = await res.json().catch(() => null) as {
+          code?: number
+          message?: string
+          data?: VisionResultData
+        } | null
+        if (!json || json.code !== 0 || !json.data)
+          throw new Error(json?.message || 'Vision prompt failed')
+        resultData = json.data
+        resultMessage = String(json.message || '')
+      }
+
+      if (!resultData)
+        throw new Error('Vision returned no result')
+
+      const next = String(resultData.prompt || resultData.motionPrompt || '').trim()
+      if (!next)
+        throw new Error('Vision returned empty prompt')
+
+      handlePromptValueChange(next)
+      if (resultData.caption && isDraftMode)
+        handleCaptionPromptChange(String(resultData.caption).slice(0, 500))
+
+      const via = resultData.source === 'agent'
+        ? (resultData.provider || 'Grok')
+        : 'template'
+      const n = resultData.refImageCount || imageUrls.length || 0
+      const isCommercial = resultData.mode === 'storyboard_commercial'
+      const boardN = resultData.boardRefUrls?.length || 0
+
+      setVisionRun({
+        active: false,
+        percent: 100,
+        stage: isCommercial
+          ? `Commercial ${resultData.duration || duration || 10}s prompt · board plan-only`
+          : resultData.source === 'agent'
+            ? `Catalog brief · ${n} ref${n === 1 ? '' : 's'}`
+            : `Fallback (${via})`,
+        step: 'done',
+        detail: isCommercial
+          ? (boardN ? `${boardN} board marked plan-only · product = video hero` : 'Auto beats · product hero')
+          : hasBugsellCatalog ? 'BugSell + refs' : 'From refs',
+        refCount: n,
+        resolvedCount: n,
+        provider: via,
+        previewUrls: imageUrls,
+        resultTitle: resultData.title,
+        resultScene: resultData.vision?.scene || resultData.vision?.productType,
+        resultSource: resultData.source,
+        mode: resultData.mode,
+      })
+
+      // Auto-enable storyboard mode when vision found a board (ops should gen as commercial)
+      if (isCommercial && boardN > 0 && !storyboardMode) {
+        setStoryboardMode(true)
+        setContentType('video')
+        updateConfig(configKey, { contentType: 'video', aspectRatio: '9:16' })
+        setAspectRatio('9:16')
+        setMatchSourceAspect(false)
+      }
+
+      if (resultData.source !== 'agent') {
+        toast.warning(`Vision fallback (${via}) — check Grok pool / clearer product photo`)
+      }
+      else if (isCommercial) {
+        toast.success(
+          boardN
+            ? `Storyboard detected · ${resultData.duration || duration || 10}s commercial prompt · board not video hero`
+            : `Commercial ${resultData.duration || duration || 10}s prompt ready`,
+        )
+      }
+      else {
+        toast.success(`Vision ready · ${n} ref${n === 1 ? '' : 's'} · review then Generate`)
+      }
+
+      // Auto-collapse success panel after staff has a moment to see chips
+      visionDismissTimerRef.current = setTimeout(() => {
+        setVisionRun(IDLE_VISION_STATE)
+        visionDismissTimerRef.current = null
+      }, 8_000)
+
+      void resultMessage
+    }
+    catch (e) {
+      if (abort.signal.aborted) {
+        // cancelVisionRun already set error state
+        return
+      }
+      const msg = e instanceof Error ? e.message : 'Vision prompt failed'
+      setVisionRun(prev => ({
+        ...prev,
+        active: false,
+        step: 'error',
+        stage: 'Vision failed',
+        error: msg,
+        percent: prev.percent || 0,
+        previewUrls: imageUrls,
+      }))
+      toast.error(msg)
+    }
+    finally {
+      if (visionAbortRef.current === abort)
+        visionAbortRef.current = null
+      setVisionPromptLoading(false)
+    }
+  }, [
+    aspectRatio,
+    bugsellProduct,
+    collectRefImageUrls,
+    configKey,
+    duration,
+    effectiveSelectedPlatforms,
+    handleCaptionPromptChange,
+    handlePromptValueChange,
+    isDraftMode,
+    matchSourceAspect,
+    promptValue,
+    selectedPlatforms,
+    storyboardMode,
+    updateConfig,
+  ])
+
+  // Cleanup vision timers / abort on unmount
+  useEffect(() => {
+    return () => {
+      visionAbortRef.current?.abort()
+      if (visionDismissTimerRef.current)
+        clearTimeout(visionDismissTimerRef.current)
+    }
+  }, [])
+
+  const applyBugSellProduct = useCallback((selection: ProductPickerSelection) => {
+    // Identity only in staff prompt — motion locks + letterbox run server-side.
+    const prompt = [
+      `Product: ${selection.productTitle}`,
+      `URL: ${selection.productUrl}`,
+      selection.productNotes ? `Context: ${selection.productNotes}` : '',
+    ].filter(Boolean).join('\n')
+
+    setBugsellProduct(selection)
+    handlePromptValueChange(prompt)
+    // Prefer source aspect only if selected platforms allow it (IG Reels needs 4:5–9:16).
+    if (contentType === 'video') {
+      const plats = effectiveSelectedPlatforms.length ? effectiveSelectedPlatforms : selectedPlatforms
+      const ready = resolvePublishReadyGenParams({
+        platforms: plats,
+        preferredAspect: '1:1', // typical catalog photo
+        preferredDuration: duration || 15,
+        modelRatios: [...currentVideoModelConfig.supportedRatios],
+        modelDurationMin: 6,
+        modelDurationMax: 15,
+        forceSocialPortrait: false,
+        fitPlatforms: true,
+      })
+      if (ready.aspectCorrected) {
+        setMatchSourceAspect(false)
+        setAspectRatio(ready.aspectRatio)
+        updateConfig(configKey, { aspectRatio: ready.aspectRatio, duration: ready.duration })
+        toast.warning(
+          `Channels need ${ready.aspectRatio} (e.g. Instagram Reels). Will pad product photo — no stretch.`,
+        )
+      }
+      else {
+        setMatchSourceAspect(true)
+      }
+      setDuration(ready.duration)
+      updateConfig(configKey, { duration: ready.duration })
+    }
+    else {
+      setMatchSourceAspect(true)
+    }
+
+    // Auto-attach product thumbnail as reference media (required for accurate product video).
+    if (selection.thumbnailUrl) {
+      const id = `bugsell-ref-${selection.productId || Date.now()}`
+      setMedias((prev) => {
+        const withoutOldBugSell = prev.filter(m => !String(m.id).startsWith('bugsell-ref-'))
+        const next = [
+          {
+            id,
+            url: selection.thumbnailUrl!,
+            type: 'image' as const,
+            name: selection.productTitle || 'BugSell product',
+          },
+          ...withoutOldBugSell,
+        ]
+        const completed: IPersistedMedia[] = next
+          .filter((m): m is typeof m & { url: string, id: string } => Boolean(m.url && m.id) && (m.type === 'image' || m.type === 'video'))
+          .map(m => ({
+            id: m.id,
+            url: m.url,
+            type: m.type as 'image' | 'video',
+            name: m.name,
+          }))
+        updateConfig(configKey, { persistedMedias: completed })
+        return next
+      })
+    }
+
+    setBugsellPickerOpen(false)
+    toast.success(selection.thumbnailUrl
+      ? 'BugSell product applied · video will match photo aspect (no stretch). Pick 9:16 to force Reels pad.'
+      : 'BugSell product applied to prompt')
+  }, [aspectRatio, configKey, contentType, currentVideoModelConfig.supportedRatios, duration, effectiveSelectedPlatforms, handlePromptValueChange, selectedPlatforms, setMedias, updateConfig])
+
   return (
     <div
       className={cn(styles.container, isVideoEditMode && styles.videoEditMode, isDragging && styles.dragging, className)}
@@ -1583,6 +2286,53 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+      {bugsellProduct && (
+        <div
+          data-testid="draftbox-bugsell-chip"
+          className={SOCIAL_OPS_PRODUCT_CHIP_CLASS}
+        >
+          <div className={SOCIAL_OPS_PRODUCT_THUMB_CLASS}>
+            {bugsellProduct.thumbnailUrl
+              ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={bugsellProduct.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+                )
+              : (
+                  <div className="grid h-full place-items-center text-[10px] text-muted-foreground">SKU</div>
+                )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+              <BugSellMark size={14} className="rounded-sm" />
+              BugSell · optional
+            </div>
+            <div className="truncate text-[13px] font-semibold tracking-tight">{bugsellProduct.productTitle}</div>
+            <div className="truncate text-[11px] text-muted-foreground">
+              {bugsellProduct.productNotes || bugsellProduct.productUrl}
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 shrink-0 rounded-lg text-[12px] text-muted-foreground"
+            onClick={() => setBugsellPickerOpen(true)}
+          >
+            Change
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            aria-label="Clear BugSell product"
+            onClick={() => setBugsellProduct(null)}
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
+
       {/* 上半区：图片堆叠 + textarea */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-3 p-4 pb-2">
         <div className="flex-shrink-0 pt-1 w-full sm:w-auto">
@@ -1616,6 +2366,15 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
             rows={3}
           />
           <div className="absolute top-0 right-4 flex flex-col items-center gap-0.5">
+            <button
+              data-testid="draftbox-bugsell-open-btn"
+              type="button"
+              className="p-1 text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+              onClick={() => setBugsellPickerOpen(true)}
+              title="Pick BugSell product"
+            >
+              <ShoppingBag className="h-4 w-4" />
+            </button>
             {/* 刷新按钮 - 始终可见 */}
             <button
               data-testid="draftbox-ai-reset-btn"
@@ -1625,6 +2384,18 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
               title={t('detail.resetConfig')}
             >
               <RotateCcw className="h-4 w-4" />
+            </button>
+            <button
+              data-testid="draftbox-ai-vision-icon-btn"
+              type="button"
+              className="p-1 text-muted-foreground hover:text-foreground cursor-pointer transition-colors disabled:opacity-40"
+              onClick={() => void handleVisionGenPrompt()}
+              disabled={visionPromptLoading || isUploading}
+              title="Vision → prompt from ref images"
+            >
+              {visionPromptLoading
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Eye className="h-4 w-4" />}
             </button>
             <button
               data-testid="draftbox-ai-open-prompt-editor-btn"
@@ -1657,10 +2428,135 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
       </div>
 
       {/* 下半区：工具栏 */}
-      <div className="px-4 pb-3 pt-0">
+      <div className="px-4 pb-3 pt-0 space-y-2">
+        {(visionRun.active || visionRun.step === 'done' || visionRun.step === 'error' || visionRun.error) && (
+          <VisionProgressPanel
+            state={visionRun}
+            onCancel={visionRun.active ? cancelVisionRun : undefined}
+            onDismiss={dismissVisionPanel}
+          />
+        )}
+        {platformAspectPreflight && (
+          <div
+            data-testid="draftbox-platform-aspect-preflight"
+            className={cn(
+              'flex flex-col gap-1 rounded-xl border px-3 py-2 text-[12px]',
+              platformAspectPreflight.blocked.length
+                ? 'border-destructive/40 bg-destructive/5 text-destructive'
+                : 'border-amber-500/35 bg-amber-500/10 text-amber-900 dark:text-amber-100',
+            )}
+          >
+            <div className="font-medium">
+              {platformAspectPreflight.blocked.length
+                ? 'Platforms need a different video frame before Generate'
+                : `Will generate ${platformAspectPreflight.aspect} for selected channels`}
+            </div>
+            <div className="text-[11px] opacity-90 leading-relaxed">
+              Instagram Reels: 4:5–9:16 · YouTube: Shorts 9:16 or landscape 16:9 · multi-post usually 9:16 (pad, no stretch).
+              {platformAspectPreflight.notes[0] ? ` · ${platformAspectPreflight.notes[0]}` : ''}
+            </div>
+            {platformAspectPreflight.blocked.slice(0, 2).map(([plat, reason]) => (
+              <div key={plat} className="text-[11px] opacity-90">
+                {plat}
+                :
+                {' '}
+                {reason}
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {!bugsellProduct && (
+            <button
+              type="button"
+              data-testid="draftbox-bugsell-pick-btn"
+              onClick={() => setBugsellPickerOpen(true)}
+              className={cn(
+                'inline-flex h-8 items-center gap-1.5 rounded-full border border-dashed border-border/80',
+                'bg-transparent px-2.5 text-[12px] font-medium text-muted-foreground',
+                'transition-colors hover:border-foreground/20 hover:bg-muted/40 hover:text-foreground',
+              )}
+              title="Optional · BugSell production catalog"
+            >
+              <BugSellMark size={18} className="rounded-md shadow-sm" />
+              BugSell
+              <span className="text-[10px] font-normal text-muted-foreground/80">optional</span>
+            </button>
+          )}
+          <button
+            type="button"
+            data-testid="draftbox-vision-prompt-btn"
+            onClick={() => void handleVisionGenPrompt()}
+            disabled={visionPromptLoading || isUploading}
+            className={cn(
+              // Match toolbar pills — quiet operator chrome, not a purple promo chip
+              'inline-flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-medium transition-colors',
+              'disabled:opacity-50 disabled:pointer-events-none',
+              visionPromptLoading
+                ? 'border-border bg-muted text-foreground'
+                : 'border-border/80 bg-background text-muted-foreground hover:border-foreground/15 hover:bg-muted/50 hover:text-foreground',
+            )}
+            title="Vision: read stacked ref images → SEO + motion brief"
+          >
+            {visionPromptLoading
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              : <Eye className="h-3.5 w-3.5" />}
+            {visionPromptLoading ? 'Reading…' : 'Vision → prompt'}
+          </button>
+          <button
+            type="button"
+            data-testid="draftbox-storyboard-mode-btn"
+            onClick={() => {
+              const next = !storyboardMode
+              setStoryboardMode(next)
+              if (next) {
+                setContentType('video')
+                updateConfig(configKey, { contentType: 'video', aspectRatio: '9:16', duration: 10 })
+                setAspectRatio('9:16')
+                setDuration(10)
+                setMatchSourceAspect(false)
+                // Prefer Imagine 1.5 for multi-shot I2V when available
+                const prefer15 = pricingData?.videoModels?.find(m =>
+                  /grok-imagine-video-1\.5|imagine-video-1\.5/i.test(m.name || ''),
+                )
+                if (prefer15?.name) {
+                  setSelectedVideoModels([prefer15.name])
+                  setModelType(prefer15.name)
+                  updateConfig(configKey, { modelType: prefer15.name, selectedVideoModels: [prefer15.name] })
+                }
+                toast.success(
+                  'Storyboard ON · Vision builds Scene 1/2/3 commercial prompt · product = only video hero',
+                )
+              }
+              else {
+                toast.info('Storyboard off')
+              }
+            }}
+            disabled={isUploading || contentType === 'image_text'}
+            className={cn(
+              'inline-flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-medium transition-colors',
+              'disabled:opacity-50 disabled:pointer-events-none',
+              storyboardMode
+                ? 'border-border bg-muted text-foreground'
+                : 'border-border/80 bg-transparent text-muted-foreground hover:border-foreground/20 hover:bg-muted/40 hover:text-foreground',
+            )}
+            title="Storyboard: Vision parses board → commercial multi-scene prompt · single product I2V (board is plan-only)."
+          >
+            <Clapperboard className="h-3.5 w-3.5" />
+            Storyboard
+          </button>
+          <span className="hidden text-[11px] text-muted-foreground sm:inline">
+            {visionPromptLoading
+              ? (visionRun.stage || 'Working…')
+              : storyboardMode
+                ? `Commercial ${duration || 10}s · product I2V`
+                : 'Vision: product + board → prompt'}
+          </span>
+        </div>
         <ToolBarInline
           contentType={contentType}
           selectedVideoModels={selectedVideoModels}
+          modelSelectionMode={modelSelectionMode}
           aspectRatio={aspectRatio}
           duration={duration}
           resolution={resolution || defaultVideoResolution}
@@ -1686,12 +2582,15 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
           isDraftMode={isDraftMode}
           hideNonDraftModes={forceDraftMode}
           selectedPlatforms={selectedPlatforms}
+          platformPreset={platformPreset}
+          connectedPlatformCount={connectedPlatforms.length}
           effectiveLimitsDetailed={effectiveLimitsDetailed}
           disabledPlatforms={incompatiblePlatforms}
           moreOptionsOpen={moreOptionsOpen}
           onDraftModeChange={handleDraftModeChange}
           onContentTypeChange={handleContentTypeChange}
           onVideoModelsChange={handleVideoModelsChange}
+          onModelSelectionModeChange={handleModelSelectionModeChange}
           onResolutionChange={handleResolutionChange}
           onAspectRatioChange={handleAspectRatioChange}
           onDurationChange={handleDurationChange}
@@ -1700,6 +2599,7 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
           onImageCountChange={handleImageCountChange}
           onImageSizeChange={handleImageSizeChange}
           onPlatformsChange={handlePlatformsChange}
+          onPlatformPresetChange={handlePlatformPresetChange}
           onMoreOptionsChange={handleMoreOptionsOpenChange}
           onSubmit={handleSubmit}
         />
@@ -1719,16 +2619,10 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
           <div className="flex flex-col gap-1 px-1 sm:flex-row sm:items-center">
             <div className="flex shrink-0 items-center gap-1 text-xs font-normal text-muted-foreground/65 sm:w-24">
               <span>{t('detail.systemCaptionPrompt')}</span>
-              <TooltipProvider delayDuration={120}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <CircleHelp className="h-2.5 w-2.5 cursor-help text-muted-foreground/50 hover:text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-64 text-xs leading-5">
-                    {t('detail.systemCaptionPromptTip')}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <CircleHelp
+                className="h-2.5 w-2.5 cursor-help text-muted-foreground/50 hover:text-muted-foreground"
+                aria-label={t('detail.systemCaptionPromptTip')}
+              />
             </div>
             <Input
               className="h-5 rounded-none border-x-0 border-t-0 border-b border-dashed border-border/35 bg-transparent px-0 py-0 text-xs leading-none text-muted-foreground/75 shadow-none md:text-xs focus-visible:border-muted-foreground/55 focus-visible:text-foreground focus-visible:ring-0"
@@ -1750,6 +2644,39 @@ const AiBatchGenerateBar = memo(({ groupId, onGenerated, className, forceDraftMo
         onSave={handlePromptValueChange}
         onPaste={handlePaste}
       />
+
+      <Sheet
+        open={bugsellPickerOpen}
+        onOpenChange={(open) => {
+          setBugsellPickerOpen(open)
+          if (open)
+            prefetchBugSellCatalog()
+        }}
+      >
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl lg:max-w-4xl"
+          data-testid="draftbox-bugsell-sheet"
+        >
+          <SheetHeader className="space-y-0 border-b border-border/80 px-4 py-3 text-left sm:px-5">
+            <div className="flex items-center justify-between gap-3 pr-8">
+              <SheetTitle className="flex items-center gap-2 text-[14px] font-semibold tracking-tight leading-none">
+                <BugSellMark size={20} className="rounded-md shadow-sm" />
+                BugSell catalog
+              </SheetTitle>
+              <SheetDescription className="sr-only">
+                Browse BugSell products and shops. Apply one to prefill your generation prompt.
+              </SheetDescription>
+              <span className="hidden text-[11px] text-muted-foreground sm:inline">
+                Apply → prompt + photo ref
+              </span>
+            </div>
+          </SheetHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <BugSellProductPicker embedded onSelect={applyBugSellProduct} />
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* 拖拽上传遮罩 */}
       {isDragging && (
