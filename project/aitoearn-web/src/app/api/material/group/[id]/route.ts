@@ -1,0 +1,4 @@
+import { getMaterialGroups, saveMaterialGroups } from '../../_local'
+async function idOf(params: Promise<{ id: string }>) { return (await params).id }
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) { const id = await idOf(params); const group = (await getMaterialGroups()).find(item => item.id === id); return group ? Response.json({ code: 0, data: group, message: 'ok', url: `/api/material/group/${id}` }) : Response.json({ code: 404, data: null, message: 'Plan not found', url: `/api/material/group/${id}` }, { status: 404 }) }
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) { const id = await idOf(params); const groups = (await getMaterialGroups()).filter(item => item.id !== id); await saveMaterialGroups(groups); return Response.json({ code: 0, data: true, message: 'ok', url: `/api/material/group/${id}` }) }
